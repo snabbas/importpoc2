@@ -1,12 +1,9 @@
 ﻿using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
-using ASI.Sugar.Collections;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
-using Radar.Core.Models.Import;
-using Radar.Core.Models.Product;
 using Radar.Data;
 using System;
 using System.Collections.Generic;
@@ -14,6 +11,11 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using Radar.Models;
+using Radar.Models.Criteria;
+using Radar.Models.Product;
+using ProductKeyword = Radar.Models.Product.ProductKeyword;
+using ProductMediaItem = Radar.Models.Product.ProductMediaItem;
 
 namespace ImportPOC2
 {
@@ -21,7 +23,7 @@ namespace ImportPOC2
     {
         private static SharedStringTablePart _stringTable;
         private static List<string> _sheetColumnsList;
-        private static IQueryable<Template> _mapping;
+        private static IQueryable<Radar.Core.Models.Import.Template> _mapping;
         private static string _curXid;
         private static int _companyId;
         private static Batch _curBatch;
@@ -31,7 +33,7 @@ namespace ImportPOC2
         private static bool _firstRowForProduct = true;
 
         private static List<Category> _catlist = null;
-        private static List<Category> categoryList
+        private static List<Category> CategoryList
         {
             get
             {
@@ -51,7 +53,29 @@ namespace ImportPOC2
             set { _catlist = value; }
         }
 
+        private static List<ProductColorGroup> _colorGroupList = null;
+
+        private static List<ProductColorGroup> colorGroupList
+        {
+            get
+            {
+                if (_colorGroupList == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/colors").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _colorGroupList = JsonConvert.DeserializeObject<List<ProductColorGroup>>(content);
+                    }
+                }
+                return _colorGroupList;
+            }
+            set { _colorGroupList = value; }
+        }
+
         private static log4net.ILog _log;
+
+
         static void Main(string[] args)
         {
             //onetime stuff
@@ -252,16 +276,16 @@ namespace ImportPOC2
             if (!string.IsNullOrWhiteSpace(_curXid))
             {
                 //using current XID, check if product exists, otherwise create new empty model 
-                _currentProduct = getProductByXid() ?? new Product { CompanyId = _companyId};
+                _currentProduct = getProductByXid() ?? new Radar.Models.Product.Product { CompanyId = _companyId };
                 _firstRowForProduct = true; 
             }
         }
 
         //TODO: currently only able to do this via product import controller endpoint
         //therefore, refactor radar somehow to expose this via core/data/? 
-        private static Product getProductByXid()
+        private static Radar.Models.Product.Product getProductByXid()
         {
-            Product retVal = null;
+            Radar.Models.Product.Product retVal = null;
 
             //TODO: read environment from CoNFIG
             var endpointUrl = string.Format("productimport?externalProductId={0}&companyId={1}", _curXid, _companyId);
@@ -273,7 +297,7 @@ namespace ImportPOC2
                 if (results.IsSuccessStatusCode)
                 {
                     var content = results.Content.ReadAsStringAsync().Result;
-                    retVal = JsonConvert.DeserializeObject<Product>(content);
+                    retVal = JsonConvert.DeserializeObject<Radar.Models.Product.Product>(content);
                 }
                 else
                 {
@@ -330,6 +354,7 @@ namespace ImportPOC2
                     break;
 
                 case "Product_Color":
+                    processColor(text);
                     break;
 
                 case "Material":
@@ -344,52 +369,153 @@ namespace ImportPOC2
             }
         }
 
+        private static void processColor(string text)
+        {
+            //colors are comma delimited 
+            if (_firstRowForProduct)
+            {
+                var colorList = extractCsvList(text);
+                colorList.ForEach(c =>
+                {
+                    //each color is in format of colorName=alias
+                    var colorName = string.Empty;
+                    var aliasName = string.Empty;
+                    var colorWithAlias = c.Split('=');
+                    if (colorWithAlias.Length > 1)
+                    {
+                        colorName = colorWithAlias[0];
+                        aliasName = colorWithAlias[1];
+                    }
+                    else
+                    {
+                        colorName = c;
+                        aliasName = c;
+                    }
+                    // if colorname isn't recognized, then it gets "UNCLASSIFIED/other" grouping
+                    var productColors = getCriteriaSetValuesByCode("PRCL");
+                    var colorObj = colorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => String.Equals(g.Description, colorName, StringComparison.CurrentCultureIgnoreCase));
+                    var existing = productColors.FirstOrDefault(p => p.Value == aliasName);
+
+                    long setCodeId = 0;
+                    if (colorObj == null)
+                    {
+                        //they picked a color that doesn't exist, so we choose the "other" set code to assign it on the new value
+                        colorObj = colorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => string.Equals(g.Description, "Unclassified/Other", StringComparison.CurrentCultureIgnoreCase));
+                        if (colorObj != null)
+                        {
+                            setCodeId = colorObj.SetCodeValues.First().Id;
+                        }
+                    }
+                    else
+                    {
+                        setCodeId = colorObj.SetCodeValues.First().Id;
+                    }
+
+                    if (existing == null)
+                    {
+                        //needs to be added
+                        createNewValue("PRCL", aliasName, setCodeId);
+                    }
+                    else
+                    {
+                        //update existing if its different colorname?
+                        //updateValue(existing, setCodeId);
+                    }
+
+                });
+            }
+        }
+
+        private static void createNewValue(string criteriaCode, string aliasName, long setCodeValueId, string optionName = "")
+        {
+            var cSet = getCriteriaSetByCode(criteriaCode, optionName);
+
+            if (!cSet.Any())
+            {
+                
+            }
+        }
+
+        private static IEnumerable<CriteriaSetValue> getCriteriaSetValuesByCode(string criteriaCode, string optionName = "")
+        {
+            var result = new List<CriteriaSetValue>();
+
+            var cSet = getCriteriaSetByCode(criteriaCode, optionName);
+            result = cSet.SelectMany(c => c.CriteriaSetValues).ToList();
+
+            return result;
+        }
+
+        private static IEnumerable<ProductCriteriaSet> getCriteriaSetByCode(string criteriaCode, string optionName = "")
+        {
+            var retVal = new List<ProductCriteriaSet>();
+            var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
+
+            if (prodConfig != null)
+            {
+                retVal = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
+            }
+
+            return retVal;
+        }
+
+        private static List<string> extractCsvList(string text)
+        {
+            //returns list of strings from input string, split on commas, each value is trimmed, and only non-empty values are returned.
+            return text.Split(',').Select(str => str.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+        }
+
         private static void processKeywords(string text)
         {
             //comma delimited list of keywords - only "visible" keywords, never ad or seo keywords
             if (_firstRowForProduct)
             {
-                var keywords = text.Split(',').Select(str => str.Trim()).ToList();
-
-                keywords.Where(k => !string.IsNullOrWhiteSpace(k)).ForEach(keyword =>
+                var keywords = extractCsvList(text);
+                if (_currentProduct.ProductKeywords == null)
+                {
+                    _currentProduct.ProductKeywords = new Collection<ProductKeyword>();
+                }
+                keywords.ForEach(keyword =>
                 {
                     var keyObj = _currentProduct.ProductKeywords.FirstOrDefault(p => p.Value == keyword);
-
+                    if (keyObj == null)
+                    {
+                        //need to add it
+                        var newKeyword = new ProductKeyword {Value = keyword, TypeCode = "HIDD"};
+                        _currentProduct.ProductKeywords.Add(newKeyword);
+                    }
                 });
             }
-
         }
 
         private static void processCategory(string text)
         {
             if (_firstRowForProduct)
             {
-                var categories = text.Split(',').Select(str => str.Trim()).ToList();
-                
+                var categories = extractCsvList(text);
+
                 categories.ForEach(curCat =>
                 {
-                    if (!string.IsNullOrWhiteSpace(curCat))
+                    //need to lookup categories
+                    var category = CategoryList.FirstOrDefault(c => c.Name == curCat);
+                    if (category != null)
                     {
-                        //need to lookup categories
-                        var category = categoryList.FirstOrDefault(c => c.Name == curCat);
-                        if (category != null)
-                        {
-                            //just in case it's totally empty/null
-                            if (_currentProduct.SelectedProductCategories == null)
-                                _currentProduct.SelectedProductCategories = new Collection<ProductXCategory>();
+                        //just in case it's totally empty/null
+                        if (_currentProduct.SelectedProductCategories == null)
+                            _currentProduct.SelectedProductCategories = new Collection<ProductCategory>();
 
-                            var existing = _currentProduct.SelectedProductCategories.FirstOrDefault(c => c.CategoryCode == category.Code);
-                            if (existing == null)
-                            {
-                                var newCat = new ProductXCategory {CategoryCode = category.Code, AdCategoryFlg = false};
-                                _currentProduct.SelectedProductCategories.Add(newCat);
-                            }
-                            else
-                            {
-                                //s/b nothing to do? 
-                            }
+                        var existing = _currentProduct.SelectedProductCategories.FirstOrDefault(c => c.Code == category.Code);
+                        if (existing == null)
+                        {
+                            var newCat = new ProductCategory {Code = category.Code, AdCategoryFlg = false};
+                            _currentProduct.SelectedProductCategories.Add(newCat);
+                        }
+                        else
+                        {
+                            //s/b nothing to do? 
                         }
                     }
+
                 });
             }
         }
@@ -399,7 +525,7 @@ namespace ImportPOC2
             if (_firstRowForProduct)
             {
                 //text here should be a list of comma sepearated URLs, in order of display
-                var urls = text.Split(',').Select(str => str.Trim()).ToList();
+                var urls = extractCsvList(text);
                 var curUrlCount = 1;
                 urls.ForEach(currentUrl =>
                 {
@@ -426,7 +552,7 @@ namespace ImportPOC2
         private static void assignInventoryLink(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.ProductInventoryLink = updateField(text);
+                _currentProduct.ProductLevelInventoryLink = updateField(text);
         }
 
         private static void assignSummary(string text)
@@ -476,7 +602,10 @@ namespace ImportPOC2
         {
             //if we've started a radar model, 
             // we "send" the product to Radar for processing. 
-            var x = _currentProduct;
+            if (_currentProduct != null)
+            {
+                var x = _currentProduct;
+            }
         }
 
 

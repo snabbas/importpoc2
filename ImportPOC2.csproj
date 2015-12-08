@@ -88,19 +88,20 @@
       <HintPath>..\packages\NEST.1.4.3\lib\net45\Nest.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Newtonsoft.Json">
+    <Reference Include="Newtonsoft.Json, Version=6.0.0.0, Culture=neutral, PublicKeyToken=30ad4fe6b2a6aeed, processorArchitecture=MSIL">
       <HintPath>..\packages\Newtonsoft.Json.6.0.8\lib\net45\Newtonsoft.Json.dll</HintPath>
+      <Private>True</Private>
     </Reference>
     <Reference Include="RabbitMQ.Client, Version=3.4.0.0, Culture=neutral, PublicKeyToken=89e7d7c5feba84ce, processorArchitecture=MSIL">
       <HintPath>..\packages\RabbitMQ.Client.3.4.0\lib\net35\RabbitMQ.Client.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Radar.Core, Version=2.6.23.28089, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Radar.Data.1.0.23\lib\net45\Radar.Core.dll</HintPath>
+    <Reference Include="Radar.Core, Version=2.6.23.25337, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\Radar.Core.1.0.33\lib\net45\Radar.Core.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="Radar.Data, Version=2.6.23.28090, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Radar.Data.1.0.23\lib\net45\Radar.Data.dll</HintPath>
+    <Reference Include="Radar.Data">
+      <HintPath>..\packages\Radar.Data.1.0.24\lib\net45\Radar.Data.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="SqlUdttHelper, Version=0.0.16.13428, Culture=neutral, processorArchitecture=MSIL">
@@ -121,11 +122,13 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Category.cs" />
+    <Compile Include="ProductColorGroup.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
+    <None Include="log4net.config" />
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
