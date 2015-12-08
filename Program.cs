@@ -353,10 +353,8 @@ namespace ImportPOC2
 
                 keywords.Where(k => !string.IsNullOrWhiteSpace(k)).ForEach(keyword =>
                 {
-                    if ()
-                    {
+                    var keyObj = _currentProduct.ProductKeywords.FirstOrDefault(p => p.Value == keyword);
 
-                    }
                 });
             }
 
