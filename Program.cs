@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
+using ASI.Sugar.Collections;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
@@ -31,6 +32,7 @@ namespace ImportPOC2
         private static readonly HttpClient RadarHttpClient = new HttpClient {BaseAddress = new Uri("http://local-espupdates.asicentral.com/api/api/")};
         private static Product _currentProduct;
         private static bool _firstRowForProduct = true;
+        private static int globalUniqueId = 0;
 
         private static List<Category> _catlist = null;
         private static List<Category> CategoryList
@@ -297,7 +299,7 @@ namespace ImportPOC2
                 if (results.IsSuccessStatusCode)
                 {
                     var content = results.Content.ReadAsStringAsync().Result;
-                    retVal = JsonConvert.DeserializeObject<Radar.Models.Product.Product>(content);
+                    retVal = JsonConvert.DeserializeObject<Product>(content);
                 }
                 else
                 {
@@ -378,8 +380,9 @@ namespace ImportPOC2
                 colorList.ForEach(c =>
                 {
                     //each color is in format of colorName=alias
-                    var colorName = string.Empty;
-                    var aliasName = string.Empty;
+                    //TODO: COMBO COLORS
+                    string colorName;
+                    string aliasName;
                     var colorWithAlias = c.Split('=');
                     if (colorWithAlias.Length > 1)
                     {
@@ -421,8 +424,9 @@ namespace ImportPOC2
                         //update existing if its different colorname?
                         //updateValue(existing, setCodeId);
                     }
-
                 });
+
+                //remove colors from product here. 
             }
         }
 
@@ -481,10 +485,13 @@ namespace ImportPOC2
                     if (keyObj == null)
                     {
                         //need to add it
-                        var newKeyword = new ProductKeyword {Value = keyword, TypeCode = "HIDD"};
+                        var newKeyword = new ProductKeyword {Value = keyword, TypeCode = "HIDD", ID = globalUniqueId--};
                         _currentProduct.ProductKeywords.Add(newKeyword);
                     }
                 });
+                //now select any product keywords that are not in the sheet's list, and remove them
+                var toRemove = _currentProduct.ProductKeywords.Where(p => !keywords.Contains(p.Value)).ToList();
+                toRemove.ForEach(r => _currentProduct.ProductKeywords.Remove(r));
             }
         }
 
@@ -494,15 +501,16 @@ namespace ImportPOC2
             {
                 var categories = extractCsvList(text);
 
+                //just in case it's totally empty/null
+                if (_currentProduct.SelectedProductCategories == null)
+                    _currentProduct.SelectedProductCategories = new Collection<ProductCategory>();
+
                 categories.ForEach(curCat =>
                 {
                     //need to lookup categories
                     var category = CategoryList.FirstOrDefault(c => c.Name == curCat);
                     if (category != null)
                     {
-                        //just in case it's totally empty/null
-                        if (_currentProduct.SelectedProductCategories == null)
-                            _currentProduct.SelectedProductCategories = new Collection<ProductCategory>();
 
                         var existing = _currentProduct.SelectedProductCategories.FirstOrDefault(c => c.Code == category.Code);
                         if (existing == null)
@@ -515,8 +523,12 @@ namespace ImportPOC2
                             //s/b nothing to do? 
                         }
                     }
-
                 });
+
+                //remove any categories from product that aren't on the sheet; get list of codes from the sheet 
+                var sheetCategoryList = categories.Join(CategoryList, cat => cat, lookup => lookup.Name, (cat, lookup) => lookup.Code);
+                var toRemove = _currentProduct.SelectedProductCategories.Where(c => !sheetCategoryList.Contains(c.Code)).ToList();
+                toRemove.ForEach(r => _currentProduct.SelectedProductCategories.Remove(r));
             }
         }
 
