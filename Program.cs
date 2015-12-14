@@ -1,6 +1,5 @@
 ﻿using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
-using ASI.Sugar.Collections;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
@@ -17,6 +16,7 @@ using Radar.Models.Criteria;
 using Radar.Models.Product;
 using ProductKeyword = Radar.Models.Product.ProductKeyword;
 using ProductMediaItem = Radar.Models.Product.ProductMediaItem;
+[assembly: log4net.Config.XmlConfigurator(Watch = true)]
 
 namespace ImportPOC2
 {
@@ -80,6 +80,8 @@ namespace ImportPOC2
 
         static void Main(string[] args)
         {
+            _log = log4net.LogManager.GetLogger(typeof(Program));
+
             //onetime stuff
             RadarHttpClient.DefaultRequestHeaders.Accept.Clear();
             RadarHttpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -92,17 +94,14 @@ namespace ImportPOC2
             // also use to determine company ID of sheet. 
 
             var curDir = Directory.GetCurrentDirectory();
-            log4net.Config.XmlConfigurator.ConfigureAndWatch(new FileInfo(curDir));
 
-            _log = log4net.LogManager.GetLogger("ImportPOC");
-
-            _log.DebugFormat("running in {0}", curDir);
+            _log.InfoFormat("running in {0}", curDir);
 
             var xlsxFiles = Directory.GetFiles(curDir, "*.xlsx");
 
             if (!xlsxFiles.Any())
             {
-                logit(string.Format("No xlsx files found in {0}", curDir));
+                _log.InfoFormat("No xlsx files found in {0}", curDir);
             }
             else
             {
@@ -126,7 +125,7 @@ namespace ImportPOC2
 
         private static void processFile(string xlsxFile)
         {
-            logit(string.Format("processing {0}", Path.GetFileName(xlsxFile)));
+            _log.InfoFormat("processing {0}", Path.GetFileName(xlsxFile));
             //processor: 
 
             //initizations
@@ -136,7 +135,7 @@ namespace ImportPOC2
 
             if (_curBatch == null)
             {
-                logit(string.Format("unable to find batch {0}", batchId));
+                _log.ErrorFormat("unable to find batch {0}", batchId);
             }
             else
             {
@@ -630,44 +629,48 @@ namespace ImportPOC2
 
 
             //TODO: how to have these settings "sent in" here
-            
+
             var columnMetaDataPriceV1 = getColumnsByFormatVersion("ASIS", "V1");
             var columnMetaDataFullV1 = getColumnsByFormatVersion("ASIF", "V1");
             var columnMetaDataPriceV2 = getColumnsByFormatVersion("ASIS", "V2");
             var columnMetaDataFullV2 = getColumnsByFormatVersion("ASIF", "V2");
 
-            retVal = compareColumns(columnMetaDataPriceV1);
-            if (!retVal)
+            retVal = compareColumns(columnMetaDataFullV2);
+
+            if (retVal)
             {
-                logit("sheet is not price v1 format");
+                _log.InfoFormat("Sheet is Full V2 format.");
+            }
+            else
+            {
                 retVal = compareColumns(columnMetaDataPriceV2);
-            }
-            else
-            {
-                logit("sheet MATCH price v1 format");
-            }
-            if (!retVal)
-            {
-                logit("sheet is not price v2 format");
-                retVal = compareColumns(columnMetaDataFullV1);
-            }
-            else
-            {
-                logit("sheet MATCH price v2 format");
-            }
-            if (!retVal)
-            {
-                logit("sheet is not full v1 format");
-                retVal = compareColumns(columnMetaDataFullV2);
-            }
-            else
-            {
-                logit("sheet MATCH full v1 format");
-            }
 
-            logit(!retVal ? "sheet is not full v2 format" : "sheet MATCH full v2 format");
+                if (retVal)
+                {
+                    _log.InfoFormat("Sheet is Price V2 format.");
+                }
+                else
+                {
+                    retVal = compareColumns(columnMetaDataFullV1);
 
-
+                    if (retVal)
+                    {
+                        _log.InfoFormat("Sheet is Full V1 format.");
+                    }
+                    else
+                    {
+                        retVal = compareColumns(columnMetaDataPriceV1);
+                        if (retVal)
+                        {
+                            _log.InfoFormat("Sheet is Price V1 format.");
+                        }
+                        else
+                        {
+                            _log.Warn("Sheet is UNKNOWN format - cannot process");
+                        }
+                    }
+                }
+            }
             //override for testing
             //retVal = true; 
 
@@ -758,8 +761,8 @@ namespace ImportPOC2
 
         private static void logit(string message)
         {
-            //todo: hook up log4net here 
-            Console.WriteLine(message);
+
+            _log.Debug(message);
         }
     }
 }
