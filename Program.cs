@@ -1,5 +1,6 @@
 ﻿using System.Collections.ObjectModel;
 using System.Text.RegularExpressions;
+using ASI.Contracts.Stats;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using Newtonsoft.Json;
@@ -366,8 +367,273 @@ namespace ImportPOC2
 
                 case "Size_Values":
                     break;
-
+                case "Additional_Color":
+                    break;
+                case "Additional_Info":
+                    break;
+                case "Additional_Location":
+                    break;
+                case "Artwork":
+                    break;
+                case "Base_Price_Criteria_1":
+                    break;
+                case "Base_Price_Criteria_2":
+                    break;
+                case "Base_Price_Name":
+                    break;
+                case "Breakout_by_other_attribute":
+                    break;
+                case "Breakout_by_price":
+                    break;
+                case "Can_order_only_one":
+                    break;
+                case "Catalog_Information":
+                    break;
+                case "Comp_Cert":
+                    break;
+                case "Confirmed_Thru_Date":
+                    break;
+                case "Currency":
+                    break;
+                case "D1":
+                case "D10":
+                case "D2":
+                case "D3":
+                case "D4":
+                case "D5":
+                case "D6":
+                case "D7":
+                case "D8":
+                case "D9":
+                    handleDiscountCode(text, colName);
+                    break;
+                case "Disclaimer":
+                    break;
+                case "Distibutor_Only":
+                    break;
+                case "Distributor_View_Only":
+                    break;
+                case "Dont_Make_Active":
+                    break;
+                case "Imprint_Color":
+                    break;
+                case "Imprint_Location":
+                    break;
+                case "Imprint_Method":
+                    break;
+                case "Imprint_Size":
+                    break;
+                case "Inventory_Quantity":
+                    break;
+                case "Inventory_Status":
+                    break;
+                case "Less_Than_Min":
+                    break;
+                case "Linename":
+                    break;
+                case "Option_Additional_Info":
+                    break;
+                case "Option_Name":
+                    break;
+                case "Option_Type":
+                    break;
+                case "Option_Values":
+                    break;
+                case "Origin":
+                    break;
+                case "P1":
+                case "P10":
+                case "P2":
+                case "P3":
+                case "P4":
+                case "P5":
+                case "P6":
+                case "P7":
+                case "P8":
+                case "P9":
+                    handleBasePrice(text, colName);
+                    break;
+                case "Packaging":
+                    break;
+                case "Personalization":
+                    break;
+                case "Price_Includes":
+                    break;
+                case "Price_Type":
+                    break;
+                case "Product_Data_Sheet":
+                    break;
+                case "Product_Inventory_Link":
+                    break;
+                case "Product_Inventory_Quantity":
+                    break;
+                case "Product_Inventory_Status":
+                    break;
+                case "Product_Number_Criteria_1":
+                    break;
+                case "Product_Number_Criteria_2":
+                    break;
+                case "Product_Number_Other":
+                    break;
+                case "Product_Number_Price":
+                    break;
+                case "Product_Sample":
+                    break;
+                case "Product_SKU":
+                    break;
+                case "Production_Time":
+                    break;
+                case "Q1":
+                case "Q10":
+                case "Q2":
+                case "Q3":
+                case "Q4":
+                case "Q5":
+                case "Q6":
+                case "Q7":
+                case "Q8":
+                case "Q9":
+                    handleBaseQty(text, colName);
+                    break;
+                case "QUR_Flag":
+                    break;
+                case "Req_for_order":
+                    break;
+                case "Rush_Service":
+                    break;
+                case "Rush_Time":
+                    break;
+                case "Safety_Warnings":
+                    break;
+                case "Same_Day_Service":
+                    break;
+                case "SEO_FLG":
+                    break;
+                case "Shape":
+                    break;
+                case "Ship_Plain_Box":
+                    break;
+                case "Shipper_Bills_By":
+                    break;
+                case "Shipping_Dimensions":
+                    break;
+                case "Shipping_Info":
+                    break;
+                case "Shipping_Items":
+                    break;
+                case "Shipping_Weight":
+                    break;
+                case "SKU":
+                    break;
+                case "SKU_Based_On":
+                    break;
+                case "SKU_Criteria_1":
+                    break;
+                case "SKU_Criteria_2":
+                    break;
+                case "SKU_Criteria_3":
+                    break;
+                case "SKU_Criteria_4":
+                    break;
+                case "Sold_Unimprinted":
+                    break;
+                case "Spec_Sample":
+                    break;
+                case "Theme":
+                    break;
+                case "Tradename":
+                    break;
+                case "U_QUR_Flag":
+                    break;
+                case "UD1":
+                case "UD10":
+                case "UD2":
+                case "UD3":
+                case "UD4":
+                case "UD5":
+                case "UD6":
+                case "UD7":
+                case "UD8":
+                case "UD9":
+                    handleUpchargeDiscount(text, colName);
+                    break;
+                case "UP1":
+                case "UP10":
+                case "UP2":
+                case "UP3":
+                case "UP4":
+                case "UP5":
+                case "UP6":
+                case "UP7":
+                case "UP8":
+                case "UP9":
+                    handleUpchargePrice(text, colName);
+                    break;
+                case "Upcharge_Criteria_1":
+                    break;
+                case "Upcharge_Criteria_2":
+                    break;
+                case "Upcharge_Details":
+                    break;
+                case "Upcharge_Level":
+                    break;
+                case "Upcharge_Name":
+                    break;
+                case "Upcharge_Type":
+                    break;
+                case "UQ1":
+                case "UQ10":
+                case "UQ2":
+                case "UQ3":
+                case "UQ4":
+                case "UQ5":
+                case "UQ6":
+                case "UQ7":
+                case "UQ8":
+                case "UQ9":
+                    handleUpchargeQty(text, colName);
+                    break;
             }
+        }
+
+        private static void handleUpchargeQty(string text, string colName)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static void handleUpchargePrice(string text, string colName)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static void handleUpchargeDiscount(string text, string colName)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static void handleBaseQty(string text, string colName)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static void handleBasePrice(string text, string colName)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static void handleDiscountCode(string text, string colName)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static void handleBasePrice(string text)
+        {
+            throw new NotImplementedException();
+        }
+
+        private static void handleDiscountCode(string text)
+        {
+            throw new NotImplementedException();
         }
 
         private static void processColor(string text)
