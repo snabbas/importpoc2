@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 using ASI.Contracts.Stats;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using ImportPOC2.Processors;
 using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
 using Radar.Data;
@@ -77,6 +78,7 @@ namespace ImportPOC2
         }
 
         private static log4net.ILog _log;
+        private static bool _hasErrors = false;
 
 
         static void Main(string[] args)
@@ -242,13 +244,21 @@ namespace ImportPOC2
                 }
                 else
                 {
-                    //it's a column on the current product, process it. 
-                    processColumn(curColIndex, text);
+                    try
+                    {
+                        //it's a column on the current product, process it. 
+                        processColumn(curColIndex, text);
+                    }
+                    catch (Exception exc)
+                    {
+                        _hasErrors = true; 
+                        _log.Error("Unhandled exception occurred:",exc);
+                    }
                 }
 
                 //colIndex++;
                 //no longer incrementing this as getColIndex function determines where we are in the sheet
-                //some columns are apparently skipped if they don't have data. 
+                //some columns are skipped if they don't have data. 
             }
         }
 
@@ -279,7 +289,8 @@ namespace ImportPOC2
             {
                 //using current XID, check if product exists, otherwise create new empty model 
                 _currentProduct = getProductByXid() ?? new Radar.Models.Product.Product { CompanyId = _companyId };
-                _firstRowForProduct = true; 
+                _firstRowForProduct = true;
+                _hasErrors = false;
             }
         }
 
@@ -325,18 +336,18 @@ namespace ImportPOC2
                     //shouldn't be anything to do here
                     break;
                 case "Product_Name":
-                    assignProductName(text);
+                    processProductName(text);
                     break;
                 case "Product_Number":
-                    assignProductNumber(text);
+                    processProductNumber(text);
                     break;
 
                 case "Description":
-                    assignDescription(text);
+                    processDescription(text);
                     break;
 
                 case "Summary":
-                    assignSummary(text);
+                    processSummary(text);
                     break;
 
                 case "Prod_Image":
@@ -352,7 +363,7 @@ namespace ImportPOC2
                     break;
 
                 case "Inventory_Link":
-                    assignInventoryLink(text);
+                    processInventoryLink(text);
                     break;
 
                 case "Product_Color":
@@ -360,13 +371,17 @@ namespace ImportPOC2
                     break;
 
                 case "Material":
+                    processMaterial(text);
                     break;
 
                 case "Size_Group":
+                    processSizeGroup(text);
                     break;
 
                 case "Size_Values":
+                    processSizeValues(text);
                     break;
+
                 case "Additional_Color":
                     break;
                 case "Additional_Info":
@@ -374,12 +389,6 @@ namespace ImportPOC2
                 case "Additional_Location":
                     break;
                 case "Artwork":
-                    break;
-                case "Base_Price_Criteria_1":
-                    break;
-                case "Base_Price_Criteria_2":
-                    break;
-                case "Base_Price_Name":
                     break;
                 case "Breakout_by_other_attribute":
                     break;
@@ -392,20 +401,6 @@ namespace ImportPOC2
                 case "Comp_Cert":
                     break;
                 case "Confirmed_Thru_Date":
-                    break;
-                case "Currency":
-                    break;
-                case "D1":
-                case "D10":
-                case "D2":
-                case "D3":
-                case "D4":
-                case "D5":
-                case "D6":
-                case "D7":
-                case "D8":
-                case "D9":
-                    handleDiscountCode(text, colName);
                     break;
                 case "Disclaimer":
                     break;
@@ -441,25 +436,9 @@ namespace ImportPOC2
                     break;
                 case "Origin":
                     break;
-                case "P1":
-                case "P10":
-                case "P2":
-                case "P3":
-                case "P4":
-                case "P5":
-                case "P6":
-                case "P7":
-                case "P8":
-                case "P9":
-                    handleBasePrice(text, colName);
-                    break;
                 case "Packaging":
                     break;
                 case "Personalization":
-                    break;
-                case "Price_Includes":
-                    break;
-                case "Price_Type":
                     break;
                 case "Product_Data_Sheet":
                     break;
@@ -482,20 +461,6 @@ namespace ImportPOC2
                 case "Product_SKU":
                     break;
                 case "Production_Time":
-                    break;
-                case "Q1":
-                case "Q10":
-                case "Q2":
-                case "Q3":
-                case "Q4":
-                case "Q5":
-                case "Q6":
-                case "Q7":
-                case "Q8":
-                case "Q9":
-                    handleBaseQty(text, colName);
-                    break;
-                case "QUR_Flag":
                     break;
                 case "Req_for_order":
                     break;
@@ -543,7 +508,69 @@ namespace ImportPOC2
                     break;
                 case "Tradename":
                     break;
-                case "U_QUR_Flag":
+                /* pricing fields */
+                case "Price_Includes":
+                    break;
+                case "Price_Type":
+                    break;
+                case "Currency":
+                    break;
+                case "Base_Price_Criteria_1":
+                    break;
+                case "Base_Price_Criteria_2":
+                    break;
+                case "Base_Price_Name":
+                    break;
+                case "QUR_Flag":
+                    break;
+                case "D1":
+                case "D10":
+                case "D2":
+                case "D3":
+                case "D4":
+                case "D5":
+                case "D6":
+                case "D7":
+                case "D8":
+                case "D9":
+                    handleDiscountCode(text, colName);
+                    break;
+                case "P1":
+                case "P10":
+                case "P2":
+                case "P3":
+                case "P4":
+                case "P5":
+                case "P6":
+                case "P7":
+                case "P8":
+                case "P9":
+                    handleBasePrice(text, colName);
+                    break;
+                case "Q1":
+                case "Q10":
+                case "Q2":
+                case "Q3":
+                case "Q4":
+                case "Q5":
+                case "Q6":
+                case "Q7":
+                case "Q8":
+                case "Q9":
+                    handleBaseQty(text, colName);
+                    break;
+                /* upcharge fields */
+                case "Upcharge_Criteria_1":
+                    break;
+                case "Upcharge_Criteria_2":
+                    break;
+                case "Upcharge_Details":
+                    break;
+                case "Upcharge_Level":
+                    break;
+                case "Upcharge_Name":
+                    break;
+                case "Upcharge_Type":
                     break;
                 case "UD1":
                 case "UD10":
@@ -569,18 +596,6 @@ namespace ImportPOC2
                 case "UP9":
                     handleUpchargePrice(text, colName);
                     break;
-                case "Upcharge_Criteria_1":
-                    break;
-                case "Upcharge_Criteria_2":
-                    break;
-                case "Upcharge_Details":
-                    break;
-                case "Upcharge_Level":
-                    break;
-                case "Upcharge_Name":
-                    break;
-                case "Upcharge_Type":
-                    break;
                 case "UQ1":
                 case "UQ10":
                 case "UQ2":
@@ -593,47 +608,54 @@ namespace ImportPOC2
                 case "UQ9":
                     handleUpchargeQty(text, colName);
                     break;
+                case "U_QUR_Flag":
+                    break;
             }
+        }
+
+        private static void processMaterial(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processSizeGroup(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processSizeValues(string text)
+        {
+            //throw new NotImplementedException();
         }
 
         private static void handleUpchargeQty(string text, string colName)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
         }
 
         private static void handleUpchargePrice(string text, string colName)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
         }
 
         private static void handleUpchargeDiscount(string text, string colName)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
         }
 
         private static void handleBaseQty(string text, string colName)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
         }
 
         private static void handleBasePrice(string text, string colName)
         {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
         }
 
         private static void handleDiscountCode(string text, string colName)
         {
-            throw new NotImplementedException();
-        }
-
-        private static void handleBasePrice(string text)
-        {
-            throw new NotImplementedException();
-        }
-
-        private static void handleDiscountCode(string text)
-        {
-            throw new NotImplementedException();
+            //throw new NotImplementedException();
         }
 
         private static void processColor(string text)
@@ -826,60 +848,60 @@ namespace ImportPOC2
             }
         }
 
-        private static void assignInventoryLink(string text)
+        private static void processInventoryLink(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.ProductLevelInventoryLink = updateField(text);
+                _currentProduct.ProductLevelInventoryLink = BasicStringFieldProcessor.UpdateField(text);
         }
 
-        private static void assignSummary(string text)
+        private static void processSummary(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Summary = updateField(text);
+                _currentProduct.Summary = BasicStringFieldProcessor.UpdateField(text);
         }
 
-        private static void assignDescription(string text)
+        private static void processDescription(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Description = updateField(text);
+                _currentProduct.Description = BasicStringFieldProcessor.UpdateField(text);
         }
 
-        private static void assignProductNumber(string text)
+        private static void processProductNumber(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.AsiProdNo = updateField(text);
+                _currentProduct.AsiProdNo = BasicStringFieldProcessor.UpdateField(text);
         }
 
-        private static void assignProductName(string text)
+        private static void processProductName(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Name = updateField(text);
+                _currentProduct.Name = BasicStringFieldProcessor.UpdateField(text);
         }
 
-        /// <summary>
-        /// Returns updated value of string field, based upon following rules:
-        /// 1) if text is empty, no update occurs
-        /// 2) if text is literial "NULL", field is emptied of its value
-        /// 3) otherwise, new value is returned.
-        /// </summary>
-        /// <param name="newValue"></param>
-        /// <returns>string</returns>
-        private static string updateField(string newValue)
-        {
-            string retVal = newValue;
+        ///// <summary>
+        ///// Returns updated value of string field, based upon following rules:
+        ///// 1) if text is empty, no update occurs
+        ///// 2) if text is literial "NULL", field is emptied of its value
+        ///// 3) otherwise, new value is returned.
+        ///// </summary>
+        ///// <param name="newValue"></param>
+        ///// <returns>string</returns>
+        //private static string updateField(string newValue)
+        //{
+        //    string retVal = newValue;
 
-            if (!string.IsNullOrWhiteSpace(newValue))
-            {
-                retVal = (newValue == "NULL" ? string.Empty : newValue);
-            }
-            return retVal;
-        }
+        //    if (!string.IsNullOrWhiteSpace(newValue))
+        //    {
+        //        retVal = (newValue == "NULL" ? string.Empty : newValue);
+        //    }
+        //    return retVal;
+        //}
 
         private static void finishProduct()
         {
             //if we've started a radar model, 
             // we "send" the product to Radar for processing. 
-            if (_currentProduct != null)
+            if (_currentProduct != null && !_hasErrors)
             {
                 var x = _currentProduct;
             }
