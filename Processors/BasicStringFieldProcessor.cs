@@ -14,11 +14,12 @@ namespace ImportPOC2.Processors
         /// 2) if text is literial "NULL", field is emptied of its value
         /// 3) otherwise, new value is returned.
         /// </summary>
-        /// <param name="newValue"></param>
+        /// <param name="newValue">updated value of string field</param>
+        /// <param name="origValue">original value of string field</param>
         /// <returns>string</returns>
-        public static string UpdateField(string newValue)
+        public static string UpdateField(string newValue, string origValue)
         {
-            string retVal = newValue;
+            string retVal = origValue;
 
             if (!string.IsNullOrWhiteSpace(newValue))
             {
@@ -26,6 +27,5 @@ namespace ImportPOC2.Processors
             }
             return retVal;
         }
-
     }
 }

@@ -1,4 +1,5 @@
 ﻿using System.Collections.ObjectModel;
+using System.Net;
 using System.Text.RegularExpressions;
 using ASI.Contracts.Stats;
 using DocumentFormat.OpenXml.Packaging;
@@ -313,13 +314,21 @@ namespace ImportPOC2
                 }
                 else
                 {
-                    logit(string.Format("Unable to retreive product xid:{0} for companyid: {1} reason:{2}", _curXid, _companyId, results.StatusCode));
+                    if (results.StatusCode == HttpStatusCode.NotFound)
+                    {
+                        _log.InfoFormat("Product XID {0} not found under companyID {1}; creating as new.", _curXid, _companyId);
+                    }
+                    else
+                    {
+                        _log.WarnFormat("Unable to retreive product xid:{0} for companyid: {1} reason:{2}", _curXid, _companyId, results.StatusCode);
+                    }
                 }
             }
             catch (Exception exc)
             {
                 //something bad happened.
-                logit(string.Format("Error querying product {0}/{1}:\r\n{2}", _curXid, _companyId, exc.Message));
+                _log.Error(string.Format("Error querying product XID {0} for companyId{1}", _curXid, _companyId), exc);
+
             }
 
             return retVal;
@@ -741,7 +750,7 @@ namespace ImportPOC2
 
             if (!cSet.Any())
             {
-                
+             //TODO:   
             }
         }
 
@@ -763,6 +772,10 @@ namespace ImportPOC2
             if (prodConfig != null)
             {
                 retVal = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
+                if (!string.IsNullOrWhiteSpace(optionName))
+                {
+                    retVal = retVal.Where(c => c.CriteriaDetail == optionName).ToList();
+                }
             }
 
             return retVal;
@@ -869,51 +882,32 @@ namespace ImportPOC2
         private static void processInventoryLink(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.ProductLevelInventoryLink = BasicStringFieldProcessor.UpdateField(text);
+                _currentProduct.ProductLevelInventoryLink = BasicStringFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryLink);
         }
 
         private static void processSummary(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Summary = BasicStringFieldProcessor.UpdateField(text);
+                _currentProduct.Summary = BasicStringFieldProcessor.UpdateField(text, _currentProduct.Summary);
         }
 
         private static void processDescription(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Description = BasicStringFieldProcessor.UpdateField(text);
+                _currentProduct.Description = BasicStringFieldProcessor.UpdateField(text, _currentProduct.Description);
         }
 
         private static void processProductNumber(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.AsiProdNo = BasicStringFieldProcessor.UpdateField(text);
+                _currentProduct.AsiProdNo = BasicStringFieldProcessor.UpdateField(text, _currentProduct.AsiProdNo);
         }
 
         private static void processProductName(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Name = BasicStringFieldProcessor.UpdateField(text);
+                _currentProduct.Name = BasicStringFieldProcessor.UpdateField(text, _currentProduct.Name);
         }
-
-        ///// <summary>
-        ///// Returns updated value of string field, based upon following rules:
-        ///// 1) if text is empty, no update occurs
-        ///// 2) if text is literial "NULL", field is emptied of its value
-        ///// 3) otherwise, new value is returned.
-        ///// </summary>
-        ///// <param name="newValue"></param>
-        ///// <returns>string</returns>
-        //private static string updateField(string newValue)
-        //{
-        //    string retVal = newValue;
-
-        //    if (!string.IsNullOrWhiteSpace(newValue))
-        //    {
-        //        retVal = (newValue == "NULL" ? string.Empty : newValue);
-        //    }
-        //    return retVal;
-        //}
 
         private static void finishProduct()
         {
