@@ -58,7 +58,6 @@ namespace ImportPOC2
         }
 
         private static List<ProductColorGroup> _colorGroupList = null;
-
         private static List<ProductColorGroup> colorGroupList
         {
             get
@@ -288,7 +287,7 @@ namespace ImportPOC2
             if (!string.IsNullOrWhiteSpace(_curXid))
             {
                 //using current XID, check if product exists, otherwise create new empty model 
-                _currentProduct = getProductByXid() ?? new Radar.Models.Product.Product { CompanyId = _companyId };
+                _currentProduct = getProductByXid() ?? new Product { CompanyId = _companyId };
                 _firstRowForProduct = true;
                 _hasErrors = false;
             }
@@ -296,9 +295,9 @@ namespace ImportPOC2
 
         //TODO: currently only able to do this via product import controller endpoint
         //therefore, refactor radar somehow to expose this via core/data/? 
-        private static Radar.Models.Product.Product getProductByXid()
+        private static Product getProductByXid()
         {
-            Radar.Models.Product.Product retVal = null;
+            Product retVal = null;
 
             //TODO: read environment from CoNFIG
             var endpointUrl = string.Format("productimport?externalProductId={0}&companyId={1}", _curXid, _companyId);
@@ -332,6 +331,7 @@ namespace ImportPOC2
             var colName = _sheetColumnsList.ElementAt(colIndex);
             switch (colName)
             {
+                    /* product-level fields */
                 case "XID":
                     //shouldn't be anything to do here
                     break;
@@ -350,6 +350,41 @@ namespace ImportPOC2
                     processSummary(text);
                     break;
 
+                case "Shipping_Info":
+                    break;
+                case "Additional_Info":
+                    break;
+                case "Confirmed_Thru_Date":
+                    break;
+                case "Disclaimer":
+                    break;
+                case "Distibutor_Only":
+                    break;
+                case "Distributor_View_Only":
+                    break;
+                case "Product_Data_Sheet":
+                    break;
+                case "Product_Inventory_Link":
+                    processInventoryLink(text);
+                    break;
+                case "Product_Inventory_Quantity":
+                    break;
+                case "Product_Inventory_Status":
+                    break;
+                case "Product_SKU":
+                    break;
+
+                    /* not used */
+                case "Breakout_by_other_attribute":
+                    break;
+                case "Breakout_by_price":
+                    break;
+                    /* not used */
+
+
+                    /* non-criteria set collections */
+                case "Catalog_Information":
+                    break;
                 case "Prod_Image":
                     processImage(text);
                     break;
@@ -361,11 +396,14 @@ namespace ImportPOC2
                 case "Keywords":
                     processKeywords(text);
                     break;
-
-                case "Inventory_Link":
-                    processInventoryLink(text);
+                case "Linename":
+                    break;
+                case "Safety_Warnings":
+                    break;
+                case "Comp_Cert":
                     break;
 
+                    /* criteria sets */
                 case "Product_Color":
                     processColor(text);
                     break;
@@ -384,29 +422,9 @@ namespace ImportPOC2
 
                 case "Additional_Color":
                     break;
-                case "Additional_Info":
-                    break;
                 case "Additional_Location":
                     break;
                 case "Artwork":
-                    break;
-                case "Breakout_by_other_attribute":
-                    break;
-                case "Breakout_by_price":
-                    break;
-                case "Can_order_only_one":
-                    break;
-                case "Catalog_Information":
-                    break;
-                case "Comp_Cert":
-                    break;
-                case "Confirmed_Thru_Date":
-                    break;
-                case "Disclaimer":
-                    break;
-                case "Distibutor_Only":
-                    break;
-                case "Distributor_View_Only":
                     break;
                 case "Dont_Make_Active":
                     break;
@@ -418,57 +436,23 @@ namespace ImportPOC2
                     break;
                 case "Imprint_Size":
                     break;
-                case "Inventory_Quantity":
-                    break;
-                case "Inventory_Status":
-                    break;
                 case "Less_Than_Min":
                     break;
-                case "Linename":
-                    break;
-                case "Option_Additional_Info":
-                    break;
-                case "Option_Name":
-                    break;
-                case "Option_Type":
-                    break;
-                case "Option_Values":
-                    break;
+
+
                 case "Origin":
                     break;
                 case "Packaging":
                     break;
                 case "Personalization":
                     break;
-                case "Product_Data_Sheet":
-                    break;
-                case "Product_Inventory_Link":
-                    break;
-                case "Product_Inventory_Quantity":
-                    break;
-                case "Product_Inventory_Status":
-                    break;
-                case "Product_Number_Criteria_1":
-                    break;
-                case "Product_Number_Criteria_2":
-                    break;
-                case "Product_Number_Other":
-                    break;
-                case "Product_Number_Price":
-                    break;
                 case "Product_Sample":
                     break;
-                case "Product_SKU":
-                    break;
                 case "Production_Time":
-                    break;
-                case "Req_for_order":
                     break;
                 case "Rush_Service":
                     break;
                 case "Rush_Time":
-                    break;
-                case "Safety_Warnings":
                     break;
                 case "Same_Day_Service":
                     break;
@@ -482,12 +466,38 @@ namespace ImportPOC2
                     break;
                 case "Shipping_Dimensions":
                     break;
-                case "Shipping_Info":
-                    break;
                 case "Shipping_Items":
                     break;
                 case "Shipping_Weight":
                     break;
+
+                    /* product numbers */
+                case "Product_Number_Criteria_1":
+                    break;
+                case "Product_Number_Criteria_2":
+                    break;
+                case "Product_Number_Other":
+                    break;
+                case "Product_Number_Price":
+                    break;
+                /* product numbers */ 
+
+                /* options */
+                case "Option_Additional_Info":
+                    break;
+                case "Option_Name":
+                    break;
+                case "Option_Type":
+                    break;
+                case "Option_Values":
+                    break;
+                case "Req_for_order":
+                    break;
+                case "Can_order_only_one":
+                    break;
+                /* end options */
+                
+                /* variation level SKU */
                 case "SKU":
                     break;
                 case "SKU_Based_On":
@@ -500,6 +510,13 @@ namespace ImportPOC2
                     break;
                 case "SKU_Criteria_4":
                     break;
+                case "Inventory_Quantity":
+                    break;
+                case "Inventory_Status":
+                    break;
+                case "Inventory_Link":
+                    break;
+                /* end SKU */
                 case "Sold_Unimprinted":
                     break;
                 case "Spec_Sample":
@@ -508,6 +525,7 @@ namespace ImportPOC2
                     break;
                 case "Tradename":
                     break;
+
                 /* pricing fields */
                 case "Price_Includes":
                     break;
