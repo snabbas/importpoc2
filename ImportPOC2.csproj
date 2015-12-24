@@ -121,9 +121,11 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Category.cs" />
+    <Compile Include="Models\Category.cs" />
+    <Compile Include="Extensions.cs" />
+    <Compile Include="Models\LookUp.cs" />
     <Compile Include="Processors\BasicStringFieldProcessor.cs" />
-    <Compile Include="ProductColorGroup.cs" />
+    <Compile Include="Models\ProductColorGroup.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

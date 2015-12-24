@@ -115,6 +115,7 @@ namespace ImportPOC2
 
                 foreach (var xlsxFile in xlsxFiles)
                 {
+
                     //NOTE: xlsxFile is expected to be in format {batchId}.xlsx 
                     processFile(xlsxFile);
                 }
@@ -255,8 +256,8 @@ namespace ImportPOC2
                     }
                     catch (Exception exc)
                     {
-                        _hasErrors = true; 
-                        _log.Error("Unhandled exception occurred:",exc);
+                        _hasErrors = true;
+                        _log.Error("Unhandled exception occurred:", exc);
                     }
                 }
 
@@ -332,7 +333,6 @@ namespace ImportPOC2
             {
                 //something bad happened.
                 _log.Error(string.Format("Error querying product XID {0} for companyId{1}", _curXid, _companyId), exc);
-
             }
 
             return retVal;
@@ -979,6 +979,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
+                //var categories = text.ConvertToList();//TODO: do not split on spaces.
                 var categories = extractCsvList(text);
 
                 //just in case it's totally empty/null
@@ -1017,7 +1018,9 @@ namespace ImportPOC2
             if (_firstRowForProduct)
             {
                 //text here should be a list of comma sepearated URLs, in order of display
+                //var urls = text.ConvertToList();//TODO: do not split on spaces
                 var urls = extractCsvList(text);
+
                 var curUrlCount = 1;
                 urls.ForEach(currentUrl =>
                 {
@@ -1084,6 +1087,10 @@ namespace ImportPOC2
 
         private static bool validateHeader(Row row)
         {
+            //TODO: for now we just figure out which sheet we're using, 
+            //but in reality the user selects it and tells us what they're using
+            // which way do we go with this rewrite?
+
             var retVal = true;
 
             //get list of columns from this header row
@@ -1139,17 +1146,35 @@ namespace ImportPOC2
             return retVal;
         }
 
-        private static bool compareColumns(List<string> columnMetaData)
+        /// <summary>
+        /// using input string, compare against provided lookup list and return list of values that match with appropriate code, otherwise null if no match. 
+        /// </summary>
+        /// <param name="lstInputLookups">list of strings to lookup and validate against LookupList</param>
+        /// <param name="lookupList">List of known values to match against</param>
+        /// <returns>list of lookup values with matching code or NULL</returns>
+        public static List<LookUp> ValidateLookupValues(List<string> lstInputLookups, List<LookUp> lookupList)
+        {
+            var lstUserLookupList = new List<LookUp>();
+            //var lstInputLookups = strInputLookups.ConvertToList();
+            foreach (var lookupValue in lstInputLookups)
+            {
+                var existingLookup = lookupList.Find(l => l.Value == lookupValue);
+                lstUserLookupList.Add(existingLookup ?? new LookUp { Value = lookupValue, Code = null });
+            }
+            return lstUserLookupList;
+        }
+
+        private static bool compareColumns(IEnumerable<string> columnMetaData)
         {
             //test by combining lists where the names match, removing quotes (for csv we needed quote removal, openxml should remove them)
             //stole this from current barista logic, but note that ZIP uses "first" list length to know when to stop comparing. 
-            // this means additional columns in second list are ignored.
+            // this means additional columns in second list (_sheetcolumnslist here) are ignored.
 
             var test = columnMetaData
                .Zip(_sheetColumnsList, (a, b) => a.Replace("\"\"", "\"").Trim('\"') == b ? 1 : 0)
                .Select((a, i) => new { Index = i, Value = a }).ToArray();
 
-            //TODO: log which value(s) didn't match to error log? maybe outside of here instead. 
+            //TODO: log which value(s) didn't match to error log, see barista code for this
             
             return test.All(a => a.Value == 1);
         }
