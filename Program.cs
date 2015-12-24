@@ -115,6 +115,7 @@ namespace ImportPOC2
 
                 foreach (var xlsxFile in xlsxFiles)
                 {
+                    //NOTE: xlsxFile is expected to be in format {batchId}.xlsx 
                     processFile(xlsxFile);
                 }
             }
@@ -214,7 +215,11 @@ namespace ImportPOC2
             var filename = Path.GetFileNameWithoutExtension(xlsxFile);
             if (filename != null)
             {
-                retVal = long.Parse(filename);
+                long temp;
+                if (long.TryParse(filename, out temp))
+                {
+                    retVal = temp;
+                }
             }
 
             return retVal;
@@ -358,41 +363,64 @@ namespace ImportPOC2
                     processSummary(text);
                     break;
 
-                case "Shipping_Info":
+                case "Shipping_Info": //AKA additional shipping information 
+                    processAdditionalShippingInfo(text);
                     break;
-                case "Additional_Info":
+                case "Additional_Info"://AKA additional product information 
+                    processAdditionalProductInfo(text);
                     break;
                 case "Confirmed_Thru_Date":
+                    processConfirmationDate(text);
                     break;
                 case "Disclaimer":
+                    processProductDisclaimer(text);
                     break;
-                case "Distibutor_Only":
+                case "Distibutor_Only"://this is the comment 
+                    processDistributorOnlyComment(text);
                     break;
-                case "Distributor_View_Only":
+                case "Distributor_View_Only"://this field sets IncludeAppOfferList
+                    processDistributorOnlyViewFlag(text);
                     break;
                 case "Product_Data_Sheet":
+                    processProductDataSheet(text);
                     break;
+                case "Catalog_Information": //format: catalogname:year:page
+                    processCatalogInfo(text);
+                    break;
+
+                case "Dont_Make_Active":
+                    //TODO: set flag to determine if publish should be attempted when POSTing
+                    break;
+
+
+
+                    /* product level SKU info */
                 case "Product_Inventory_Link":
                     processInventoryLink(text);
                     break;
                 case "Product_Inventory_Quantity":
+                    processInventoryQty(text);
                     break;
                 case "Product_Inventory_Status":
+                    processInventoryStatus(text);
                     break;
                 case "Product_SKU":
+                    processProductSKU(text);
                     break;
+                    /* product level SKU info end */
 
-                    /* not used */
+                    /* not processed by import even though the column is in the sheet*/
                 case "Breakout_by_other_attribute":
                     break;
                 case "Breakout_by_price":
                     break;
-                    /* not used */
+                case "SEO_FLG":
+                    /* ignored on Imports */
+                    break;
+                /* not used */
 
 
                     /* non-criteria set collections */
-                case "Catalog_Information":
-                    break;
                 case "Prod_Image":
                     processImage(text);
                     break;
@@ -404,24 +432,43 @@ namespace ImportPOC2
                 case "Keywords":
                     processKeywords(text);
                     break;
+
                 case "Linename":
+                    processLineNames(text);
                     break;
+
                 case "Safety_Warnings":
+                    processSafetyWarnings(text);
                     break;
+
                 case "Comp_Cert":
+                    processComplianceCertifications(text);
                     break;
+
+
+                /* shipping info */
+                    //these are individual columns as well, no need to validate bills by as Radar does that 
+                case "Shipping_Dimensions":
+                    break;
+                case "Shipping_Items":
+                    break;
+                case "Shipping_Weight":
+                    break;
+                case "Shipper_Bills_By":
+                    break;
+                /* shipping info */
 
                     /* criteria sets */
                 case "Product_Color":
-                    processColor(text);
+                    processProductColors(text);
                     break;
 
                 case "Material":
-                    processMaterial(text);
+                    processMaterials(text);
                     break;
 
                 case "Size_Group":
-                    processSizeGroup(text);
+                    processSizeGroups(text);
                     break;
 
                 case "Size_Values":
@@ -429,28 +476,35 @@ namespace ImportPOC2
                     break;
 
                 case "Additional_Color":
+                    processAdditionalColors(text);
                     break;
                 case "Additional_Location":
+                    processAdditionaLocations(text);
                     break;
                 case "Artwork":
-                    break;
-                case "Dont_Make_Active":
+                    processImprintArtwork(text);
                     break;
                 case "Imprint_Color":
+                    processImprintColors(text);
                     break;
                 case "Imprint_Location":
+                    processImprintLocations(text);
                     break;
                 case "Imprint_Method":
+                    processImprintMethods(text);
                     break;
                 case "Imprint_Size":
+                    processImprintSizes(text);
                     break;
                 case "Less_Than_Min":
+                    processLessThanMinimum(text);
                     break;
-
-
                 case "Origin":
+                    processOrigins(text);
                     break;
                 case "Packaging":
+                    break;
+                case "Ship_Plain_Box":
                     break;
                 case "Personalization":
                     break;
@@ -464,67 +518,8 @@ namespace ImportPOC2
                     break;
                 case "Same_Day_Service":
                     break;
-                case "SEO_FLG":
-                    break;
                 case "Shape":
                     break;
-                case "Ship_Plain_Box":
-                    break;
-                case "Shipper_Bills_By":
-                    break;
-                case "Shipping_Dimensions":
-                    break;
-                case "Shipping_Items":
-                    break;
-                case "Shipping_Weight":
-                    break;
-
-                    /* product numbers */
-                case "Product_Number_Criteria_1":
-                    break;
-                case "Product_Number_Criteria_2":
-                    break;
-                case "Product_Number_Other":
-                    break;
-                case "Product_Number_Price":
-                    break;
-                /* product numbers */ 
-
-                /* options */
-                case "Option_Additional_Info":
-                    break;
-                case "Option_Name":
-                    break;
-                case "Option_Type":
-                    break;
-                case "Option_Values":
-                    break;
-                case "Req_for_order":
-                    break;
-                case "Can_order_only_one":
-                    break;
-                /* end options */
-                
-                /* variation level SKU */
-                case "SKU":
-                    break;
-                case "SKU_Based_On":
-                    break;
-                case "SKU_Criteria_1":
-                    break;
-                case "SKU_Criteria_2":
-                    break;
-                case "SKU_Criteria_3":
-                    break;
-                case "SKU_Criteria_4":
-                    break;
-                case "Inventory_Quantity":
-                    break;
-                case "Inventory_Status":
-                    break;
-                case "Inventory_Link":
-                    break;
-                /* end SKU */
                 case "Sold_Unimprinted":
                     break;
                 case "Spec_Sample":
@@ -534,18 +529,71 @@ namespace ImportPOC2
                 case "Tradename":
                     break;
 
+                    /* product numbers */
+                    /* TODO: put individual fields into "prod num" object, then process at row change into product model */
+                case "Product_Number_Criteria_1":
+                    break;
+                case "Product_Number_Criteria_2":
+                    break;
+                case "Product_Number_Other": //product number text 
+                    break;
+
+                case "Product_Number_Price": //Product number at price grid level, really part of pricing
+                    break;
+
+                /* product numbers */ 
+
+                /* options */
+                    /* TODO: collect info into "option" object then process at row change */
+                case "Option_Type"://PROP, SHOP, IMOP
+                    break;
+                case "Option_Name":
+                    break;
+                case "Req_for_order": //flag
+                    break;
+                case "Can_order_only_one": //flag
+                    break;
+                case "Option_Additional_Info"://comments/additional info
+                    break;
+                case "Option_Values"://CSV list of values
+                    break;
+                /* end options */
+                
+                /* variation level SKU */
+                    /* TODO: for SKU, "collect" info into SKU object, then process at row change into product model */
+                case "SKU":
+                    break;
+                case "SKU_Based_On"://not used any longer
+                    break;
+                case "SKU_Criteria_1": //format: "criteriaCode: value"
+                    break;
+                case "SKU_Criteria_2"://format: "criteriaCode: value"
+                    break;
+                case "SKU_Criteria_3"://NOT supported yet
+                    break;
+                case "SKU_Criteria_4"://NOT supported yet
+                    break;
+                case "Inventory_Quantity":
+                    break;
+                case "Inventory_Status":
+                    break;
+                case "Inventory_Link":
+                    break;
+                /* end SKU */
+
                 /* pricing fields */
-                case "Price_Includes":
+                    /* TODO: for pricing, "collect" info into pricing object, then process at row change into product model */
+                case "Price_Type": //new field to distinguish List/Net pricing
                     break;
-                case "Price_Type":
+                case "Currency": //product level and required
                     break;
-                case "Currency":
+                case "Base_Price_Name"://required for each grid
                     break;
                 case "Base_Price_Criteria_1":
                     break;
                 case "Base_Price_Criteria_2":
                     break;
-                case "Base_Price_Name":
+                case "Price_Includes":
                     break;
                 case "QUR_Flag":
                     break;
@@ -559,7 +607,7 @@ namespace ImportPOC2
                 case "D7":
                 case "D8":
                 case "D9":
-                    handleDiscountCode(text, colName);
+                    handleBaseDiscountCodes(text, colName);
                     break;
                 case "P1":
                 case "P10":
@@ -571,7 +619,7 @@ namespace ImportPOC2
                 case "P7":
                 case "P8":
                 case "P9":
-                    handleBasePrice(text, colName);
+                    handleBasePrices(text, colName);
                     break;
                 case "Q1":
                 case "Q10":
@@ -586,17 +634,19 @@ namespace ImportPOC2
                     handleBaseQty(text, colName);
                     break;
                 /* upcharge fields */
+                case "Upcharge_Name": //required
+                    break;
+                case "Upcharge_Type": //run charge, color charge, etc. validate against lookup, required
+                    break;
+                case "Upcharge_Level": //order or qty level, default "other"
+                    break;
                 case "Upcharge_Criteria_1":
                     break;
                 case "Upcharge_Criteria_2":
                     break;
-                case "Upcharge_Details":
+                case "Upcharge_Details": //aka price includes
                     break;
-                case "Upcharge_Level":
-                    break;
-                case "Upcharge_Name":
-                    break;
-                case "Upcharge_Type":
+                case "U_QUR_Flag":
                     break;
                 case "UD1":
                 case "UD10":
@@ -608,7 +658,7 @@ namespace ImportPOC2
                 case "UD7":
                 case "UD8":
                 case "UD9":
-                    handleUpchargeDiscount(text, colName);
+                    handleUpchargeDiscounts(text, colName);
                     break;
                 case "UP1":
                 case "UP10":
@@ -620,7 +670,7 @@ namespace ImportPOC2
                 case "UP7":
                 case "UP8":
                 case "UP9":
-                    handleUpchargePrice(text, colName);
+                    handleUpchargePrices(text, colName);
                     break;
                 case "UQ1":
                 case "UQ10":
@@ -634,17 +684,130 @@ namespace ImportPOC2
                 case "UQ9":
                     handleUpchargeQty(text, colName);
                     break;
-                case "U_QUR_Flag":
-                    break;
             }
         }
 
-        private static void processMaterial(string text)
+        private static void processOrigins(string text)
         {
             //throw new NotImplementedException();
         }
 
-        private static void processSizeGroup(string text)
+        private static void processLessThanMinimum(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processImprintSizes(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processImprintMethods(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processImprintLocations(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processImprintColors(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processImprintArtwork(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processAdditionaLocations(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processAdditionalColors(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processSafetyWarnings(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processComplianceCertifications(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processLineNames(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processInventoryStatus(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processProductSKU(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processInventoryQty(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processCatalogInfo(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processProductDataSheet(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processDistributorOnlyViewFlag(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processDistributorOnlyComment(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processProductDisclaimer(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processConfirmationDate(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processAdditionalProductInfo(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processAdditionalShippingInfo(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processMaterials(string text)
+        {
+            //throw new NotImplementedException();
+        }
+
+        private static void processSizeGroups(string text)
         {
             //throw new NotImplementedException();
         }
@@ -659,12 +822,12 @@ namespace ImportPOC2
             //throw new NotImplementedException();
         }
 
-        private static void handleUpchargePrice(string text, string colName)
+        private static void handleUpchargePrices(string text, string colName)
         {
             //throw new NotImplementedException();
         }
 
-        private static void handleUpchargeDiscount(string text, string colName)
+        private static void handleUpchargeDiscounts(string text, string colName)
         {
             //throw new NotImplementedException();
         }
@@ -674,17 +837,17 @@ namespace ImportPOC2
             //throw new NotImplementedException();
         }
 
-        private static void handleBasePrice(string text, string colName)
+        private static void handleBasePrices(string text, string colName)
         {
             //throw new NotImplementedException();
         }
 
-        private static void handleDiscountCode(string text, string colName)
+        private static void handleBaseDiscountCodes(string text, string colName)
         {
             //throw new NotImplementedException();
         }
 
-        private static void processColor(string text)
+        private static void processProductColors(string text)
         {
             //colors are comma delimited 
             if (_firstRowForProduct)
