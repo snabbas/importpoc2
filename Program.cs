@@ -519,6 +519,7 @@ namespace ImportPOC2
                 case "Same_Day_Service":
                     break;
                 case "Shape":
+                    processShapes(text);
                     break;
                 case "Sold_Unimprinted":
                     break;
@@ -685,6 +686,11 @@ namespace ImportPOC2
                     handleUpchargeQty(text, colName);
                     break;
             }
+        }
+
+        private static void processShapes(string text)
+        {
+            //TODO: process shapes here.
         }
 
         private static void processOrigins(string text)
