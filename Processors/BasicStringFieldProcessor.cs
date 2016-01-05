@@ -27,5 +27,30 @@ namespace ImportPOC2.Processors
             }
             return retVal;
         }
+
+        public static bool UpdateField(string newValue, bool origValue)
+        {
+            bool retVal = origValue;
+
+            if (!string.IsNullOrWhiteSpace(newValue))
+            {
+                retVal = (newValue.ToLower() == "y" ? true : false);
+            }
+            return retVal;
+        }
+
+        public static DateTime? UpdateField(string newValue, DateTime? origValue)
+        {
+            DateTime? retVal = origValue;
+
+            if (!string.IsNullOrWhiteSpace(newValue))
+            {
+               if(newValue == "NULL")
+                 retVal = null;
+               else
+                 retVal = Convert.ToDateTime(newValue);
+            }
+            return retVal;
+        }
     }
 }

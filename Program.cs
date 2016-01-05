@@ -19,6 +19,7 @@ using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using ProductKeyword = Radar.Models.Product.ProductKeyword;
 using ProductMediaItem = Radar.Models.Product.ProductMediaItem;
+using Radar.Models.Pricing;
 [assembly: log4net.Config.XmlConfigurator(Watch = true)]
 
 namespace ImportPOC2
@@ -36,7 +37,7 @@ namespace ImportPOC2
         private static Product _currentProduct;
         private static bool _firstRowForProduct = true;
         private static int globalUniqueId = 0;
-
+        private static bool publishCurrentProduct = true;
         private static List<Category> _catlist = null;
         private static List<Category> CategoryList
         {
@@ -159,6 +160,101 @@ namespace ImportPOC2
             set { _packagingLookup = value; }
         }
 
+        private static List<KeyValueLookUp> _complianceLookup = null;
+        private static List<KeyValueLookUp> complianceLookup
+        {
+            get
+            {
+                if (_complianceLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/compliance").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _complianceLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+                    }
+                }
+                return _complianceLookup;
+            }
+            set { _complianceLookup = value; }
+        }
+
+        private static List<KeyValueLookUp> _safetywarningsLookup = null;
+        private static List<KeyValueLookUp> safetywarningsLookup
+        {
+            get
+            {
+                if (_safetywarningsLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/safetywarnings").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _safetywarningsLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+                    }
+                }
+                return _safetywarningsLookup;
+            }
+            set { _safetywarningsLookup = value; }
+        }
+
+        private static List<CurrencyLookUp> _currencyLookup = null;
+        private static List<CurrencyLookUp> currencyLookup
+        {
+            get
+            {
+                if (_currencyLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/currency").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _currencyLookup = JsonConvert.DeserializeObject<List<CurrencyLookUp>>(content);
+                    }
+                }
+                return _currencyLookup;
+            }
+            set { _currencyLookup = value; }
+        }
+
+        private static List<CostTypeLookUp> _costTypesLookup = null;
+        private static List<CostTypeLookUp> costTypesLookup
+        {
+            get
+            {
+                if (_costTypesLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/cost_types").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _costTypesLookup = JsonConvert.DeserializeObject<List<CostTypeLookUp>>(content);
+                    }
+                }
+                return _costTypesLookup;
+            }
+            set { _costTypesLookup = value; }
+        }
+
+        private static List<KeyValueLookUp> _inventoryStatusesLookup = null;
+        private static List<KeyValueLookUp> inventoryStatusesLookup
+        {
+            get
+            {
+                if (_inventoryStatusesLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/inventory_statuses").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _inventoryStatusesLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+                    }
+                }
+                return _inventoryStatusesLookup;
+            }
+            set { _inventoryStatusesLookup = value; }
+        }        
+
         private static log4net.ILog _log;
         private static bool _hasErrors = false;
 
@@ -194,7 +290,7 @@ namespace ImportPOC2
                 _mapping = _prodTask.Template.GetAllWithInclude(t => t.TemplateMapping)
                     .Where(t => t.AuditStatusCode == Constants.StatusCode.Audit.ACTIVE)
                     .Select(t => t);
-
+                
                 foreach (var xlsxFile in xlsxFiles)
                 {
 
@@ -253,7 +349,8 @@ namespace ImportPOC2
                         else
                         {
                             processDataRow(row);
-                            _firstRowForProduct = false; 
+                            _firstRowForProduct = false;
+                            publishCurrentProduct = true;
                         }
                     }
 
@@ -439,15 +536,12 @@ namespace ImportPOC2
                 case "Product_Number":
                     processProductNumber(text);
                     break;
-
                 case "Description":
                     processDescription(text);
                     break;
-
                 case "Summary":
                     processSummary(text);
                     break;
-
                 case "Shipping_Info": //AKA additional shipping information 
                     processAdditionalShippingInfo(text);
                     break;
@@ -475,6 +569,7 @@ namespace ImportPOC2
 
                 case "Dont_Make_Active":
                     //TODO: set flag to determine if publish should be attempted when POSTing
+                    processDontMakeActive(text);
                     break;
 
                     /* product level SKU info */
@@ -506,7 +601,6 @@ namespace ImportPOC2
                 case "Prod_Image":
                     processImage(text);
                     break;
-
                 case "Category":
                     processCategory(text);
                     break;
@@ -669,8 +763,10 @@ namespace ImportPOC2
                 /* pricing fields */
                     /* TODO: for pricing, "collect" info into pricing object, then process at row change into product model */
                 case "Price_Type": //new field to distinguish List/Net pricing
+                    processPriceType(text);
                     break;
                 case "Currency": //product level and required
+                    processCurrency(text);
                     break;
                 case "Base_Price_Name"://required for each grid
                     break;
@@ -925,6 +1021,67 @@ namespace ImportPOC2
             }
         }
 
+        private static void processPriceType(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    text = "List";
+                }
+
+                var priceTypeFound = costTypesLookup.FirstOrDefault(t => t.Code == text);
+
+                if (priceTypeFound != null)
+                {
+                    _currentProduct.CostTypeCode = BasicStringFieldProcessor.UpdateField(text, _currentProduct.CostTypeCode);
+                }
+                else 
+                {
+                    //log batch error 
+                    AddValidationError("priceType", text);
+                    _hasErrors = true;
+                }
+            }
+        }        
+
+        private static void processCurrency(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                if (_currentProduct.PriceGrids.Count > 0)
+                {
+                    if (string.IsNullOrWhiteSpace(text))
+                    {
+                        text = "USD";
+                    }
+
+                    var currencyFound = currencyLookup.FirstOrDefault(t => t.Code == text);
+
+                    if (currencyFound != null)
+                    {
+                        foreach (PriceGrid priceGrid in _currentProduct.PriceGrids)
+                        {
+                            if (priceGrid.Currency.Code != currencyFound.Code)
+                            {
+                                priceGrid.Currency = new Currency
+                                {
+                                    Code = currencyFound.Code,
+                                    Number = currencyFound.Number
+                                };
+                            }
+                        }
+                    }
+                    else
+                    {
+                        //log batch error 
+                        AddValidationError("Currency", text);
+                        _hasErrors = true;
+                    }
+                }                
+            }
+        }
+
         private static void processOrigins(string text)
         {
             //comma delimited list of origins
@@ -1034,7 +1191,10 @@ namespace ImportPOC2
 
         private static void processLessThanMinimum(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+            {
+                _currentProduct.IsOrderLessThanMinimumAllowed = BasicStringFieldProcessor.UpdateField(text, _currentProduct.IsOrderLessThanMinimumAllowed);
+            }
         }
 
         private static void processImprintSizes(string text)
@@ -1089,17 +1249,31 @@ namespace ImportPOC2
 
         private static void processInventoryStatus(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+            {
+                var inventoryStatusFound = inventoryStatusesLookup.FirstOrDefault(t => t.Value == text);
+                if (inventoryStatusFound != null)
+                {
+                    _currentProduct.ProductLevelInventoryStatusCode = BasicStringFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryStatusCode);
+                }
+                else
+                {
+                    AddValidationError("InventoryStatus", text);
+                    _hasErrors = true;
+                }
+            }
         }
 
         private static void processProductSKU(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+                _currentProduct.ProductLevelSku = BasicStringFieldProcessor.UpdateField(text, _currentProduct.ProductLevelSku);
         }
 
         private static void processInventoryQty(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+                _currentProduct.ProductLevelInventoryQuantity = Convert.ToInt32(BasicStringFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryQuantity.ToString()));
         }
 
         private static void processCatalogInfo(string text)
@@ -1119,27 +1293,34 @@ namespace ImportPOC2
 
         private static void processDistributorOnlyComment(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+                _currentProduct.DistributorComments = BasicStringFieldProcessor.UpdateField(text, _currentProduct.DistributorComments);
         }
 
         private static void processProductDisclaimer(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+                _currentProduct.Disclaimer = BasicStringFieldProcessor.UpdateField(text, _currentProduct.Disclaimer);
         }
 
         private static void processConfirmationDate(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+            {              
+                _currentProduct.PriceConfirmationDate = BasicStringFieldProcessor.UpdateField(text, _currentProduct.PriceConfirmationDate);
+            }
         }
 
         private static void processAdditionalProductInfo(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+                _currentProduct.AdditionalInfo = BasicStringFieldProcessor.UpdateField(text, _currentProduct.AdditionalInfo);
         }
 
         private static void processAdditionalShippingInfo(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+                _currentProduct.AddtionalShippingInfo = BasicStringFieldProcessor.UpdateField(text, _currentProduct.AddtionalShippingInfo);
         }
 
         private static void processMaterials(string text)
@@ -1332,7 +1513,8 @@ namespace ImportPOC2
         private static List<string> extractCsvList(string text)
         {
             //returns list of strings from input string, split on commas, each value is trimmed, and only non-empty values are returned.
-            return text.Split(',').Select(str => str.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+            //return text.Split(',').Select(str => str.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+            return text.ConvertToList();
         }
 
         private static void processKeywords(string text)
@@ -1427,6 +1609,15 @@ namespace ImportPOC2
                         }
                     }
                 });
+            }
+        }
+
+        private static void processDontMakeActive(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                if (!string.IsNullOrWhiteSpace(text) && text.ToLower() == "y")
+                    publishCurrentProduct = false;
             }
         }
 
