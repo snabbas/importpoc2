@@ -13,7 +13,19 @@ namespace ImportPOC2
     {
         public long Key { get; set; }
         public string Value { get; set; }
-    }    
+    }
+
+    public class CurrencyLookUp
+    {
+        public int Number { get; set; }
+        public string Code { get; set; }
+    }
+
+    public class CostTypeLookUp
+    {
+        public string DisplayName { get; set; }
+        public string Code { get; set; }
+    }  
 
     public class ThemeLookUp
     {
