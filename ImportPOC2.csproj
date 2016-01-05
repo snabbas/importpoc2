@@ -125,13 +125,16 @@
     <Compile Include="Models\Category.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="Models\LookUp.cs" />
-    <Compile Include="Processors\BasicStringFieldProcessor.cs" />
+    <Compile Include="Models\ProductRow.cs" />
+    <Compile Include="Processors\BasicFieldProcessor.cs" />
     <Compile Include="Models\ProductColorGroup.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="App.config" />
+    <None Include="App.config">
+      <SubType>Designer</SubType>
+    </None>
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup />

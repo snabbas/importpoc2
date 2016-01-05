@@ -1,8 +1,10 @@
 ﻿using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
+using ImportPOC2.Models;
 using ImportPOC2.Processors;
 using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
+using Radar.Core.Models.Pricing;
 using Radar.Data;
 using Radar.Models;
 using Radar.Models.Criteria;
@@ -257,6 +259,7 @@ namespace ImportPOC2
 
         private static log4net.ILog _log;
         private static bool _hasErrors = false;
+        private static ProductRow _curProdRow;
 
         static void Main(string[] args)
         {
@@ -409,45 +412,607 @@ namespace ImportPOC2
         //here we "walk" through each column and handle appropriately
         private static void processDataRow(Row row)
         {
+            _curProdRow = new ProductRow();
+
             foreach (var column in row.Elements<Cell>())
             {
                 var text = getCellText(column);
-                var curColIndex = getColIndex(column);
-                if (curColIndex == 0 && string.IsNullOrWhiteSpace(text))
+                var colIndex = getColIndex(column);
+
+                if (colIndex == 0 && string.IsNullOrWhiteSpace(text))
                 {
                     //row is invalid without XID, bail out
                     //logit("empty row encountered, skipping");
                     break;
                 }
-                if (curColIndex == 0 && _curXid != text)
+
+                populateProdObject(colIndex, text);
+
+                if (colIndex == 0 && _curXid != text)
                 {
                     //XID has changed, it's a new product
                     finishProduct();
                     _curXid = text;
                     startProduct();
                 }
-                else
-                {
-                    try
-                    {
-                        //it's a column on the current product, process it. 
-                        if (!string.IsNullOrWhiteSpace(text))
-                        {
-                            processColumn(curColIndex, text);
-                        }
-                    }
-                    catch (Exception exc)
-                    {
-                        _hasErrors = true;
-                        _log.Error("Unhandled exception occurred:", exc);
-                    }
-                }
 
-                //colIndex++;
-                //no longer incrementing this as getColIndex function determines where we are in the sheet
-                //some columns are skipped if they don't have data. 
+            }
+            try
+            {
+                processCurrentProdRow();
+            }
+            catch (Exception exc)
+            {
+                _hasErrors = true;
+                _log.Error("Unhandled exception occurred:", exc);
             }
         }
+
+        private static void processCurrentProdRow()
+        {
+            processProductLevelFields();
+            processSimpleLookups();
+            processColorsMaterials();
+            processSizes();
+            processOptions();
+            processPricing();
+            processProductNumbers();
+            processSkuInventory();
+        }
+
+        private static void processSkuInventory()
+        {
+            //TODO: VNI-10
+        }
+
+        private static void processProductNumbers()
+        {
+            //TODO: VNI-9
+        }
+
+        private static void processPricing()
+        {
+            //TODO: VNI-8
+        }
+
+        private static void processOptions()
+        {
+            //TODO: VNI-7
+        }
+
+        private static void processSizes()
+        {
+            //TODO: VNI-6
+        }
+
+        private static void processColorsMaterials()
+        {
+            //TODO: VNI-5
+        }
+
+        private static void processSimpleLookups()
+        {
+            processCatalogInfo(_curProdRow.Catalog_Information);
+            processShapes(_curProdRow.Shape);
+            processThemes(_curProdRow.Theme);
+            processTradenames(_curProdRow.Tradename);
+            processOrigins(_curProdRow.Origin);
+            processImprintMethods(_curProdRow.Imprint_Method);
+            processLineNames(_curProdRow.Linename);
+            processImprintArtwork(_curProdRow.Artwork);
+            processImprintColors(_curProdRow.Imprint_Color);
+            //sold unimprinted
+            //personalization
+            processImprintSizes(_curProdRow.Imprint_Size);
+            processImprintLocations(_curProdRow.Imprint_Location);
+            processAdditionalColors(_curProdRow.Additional_Color);
+            processAdditionaLocations(_curProdRow.Additional_Location);
+            //product sample
+            //spec sample
+            //production time
+            //rush service
+            //rush time
+            //same day
+            processPackagingOptions(_curProdRow.Packaging);
+            //shipping items (shipping estimator)
+            //shipping dimensions
+            //shipping weight
+            //shipping bills by
+            //ship plain box
+            processComplianceCertifications(_curProdRow.Comp_Cert);
+            processProductDataSheet(_curProdRow.Product_Data_Sheet);
+            processSafetyWarnings(_curProdRow.Safety_Warnings);
+        }
+
+        private static void processProductLevelFields()
+        {
+            processProductName(_curProdRow.Product_Name);
+            processProductNumber(_curProdRow.Product_Number);
+            processProductSKU(_curProdRow.Product_SKU);
+            processInventoryLink(_curProdRow.Product_Inventory_Link);
+            processInventoryStatus(_curProdRow.Product_Inventory_Status);
+            processInventoryQty(_curProdRow.Product_Inventory_Quantity);
+            processDescription(_curProdRow.Description);
+            processSummary(_curProdRow.Summary);
+            processImage(_curProdRow.Prod_Image);
+            processCategory(_curProdRow.Category);
+            processKeywords(_curProdRow.Keywords);
+            processAdditionalShippingInfo(_curProdRow.Shipping_Info);
+            processAdditionalProductInfo(_curProdRow.Additional_Info);
+            processDistributorOnlyViewFlag(_curProdRow.Distributor_View_Only);
+            processProductDisclaimer(_curProdRow.Disclaimer);
+            processCurrency(_curProdRow.Currency);
+            processLessThanMinimum(_curProdRow.Less_Than_Min);
+            processPriceType(_curProdRow.Price_Type);
+            //breakout price - not processed
+            processConfirmationDate(_curProdRow.Confirmed_Thru_Date);
+            processDontMakeActive(_curProdRow.Dont_Make_Active);
+            //breakout by attribute -- not processed
+            //seo flag -- not processed
+        }
+
+        //TODO: gotta be a better way to do this. 
+        private static void populateProdObject(int colIndex, string text)
+        {
+            //map the current column 
+            var colName = _sheetColumnsList.ElementAt(colIndex);
+
+            switch (colName)
+            {
+                case "Additional_Color":
+                    _curProdRow.Additional_Color = text;
+                    break;
+                case "Additional_Info":
+                    _curProdRow.Additional_Info = text;
+                    break;
+                case "Additional_Location":
+                    _curProdRow.Additional_Location = text;
+                    break;
+                case "Artwork":
+                    _curProdRow.Artwork = text;
+                    break;
+                case "Base_Price_Criteria_1":
+                    _curProdRow.Base_Price_Criteria_1 = text;
+                    break;
+                case "Base_Price_Criteria_2":
+                    _curProdRow.Base_Price_Criteria_2 = text;
+                    break;
+                case "Base_Price_Name":
+                    _curProdRow.Base_Price_Name = text;
+                    break;
+                case "Breakout_by_other_attribute":
+                    _curProdRow.Breakout_by_other_attribute = text;
+                    break;
+                case "Breakout_by_price":
+                    _curProdRow.Breakout_by_price = text;
+                    break;
+                case "Can_order_only_one":
+                    _curProdRow.Can_order_only_one = text;
+                    break;
+                case "Catalog_Information":
+                    _curProdRow.Catalog_Information = text;
+                    break;
+                case "Category":
+                    _curProdRow.Category = text;
+                    break;
+                case "Comp_Cert":
+                    _curProdRow.Comp_Cert = text;
+                    break;
+                case "Confirmed_Thru_Date":
+                    _curProdRow.Confirmed_Thru_Date = text;
+                    break;
+                case "Currency":
+                    _curProdRow.Currency = text;
+                    break;
+                case "D1":
+                    _curProdRow.D1 = text;
+                    break;
+                case "D10":
+                    _curProdRow.D10 = text;
+                    break;
+                case "D2":
+                    _curProdRow.D2 = text;
+                    break;
+                case "D3":
+                    _curProdRow.D3 = text;
+                    break;
+                case "D4":
+                    _curProdRow.D4 = text;
+                    break;
+                case "D5":
+                    _curProdRow.D5 = text;
+                    break;
+                case "D6":
+                    _curProdRow.D6 = text;
+                    break;
+                case "D7":
+                    _curProdRow.D7 = text;
+                    break;
+                case "D8":
+                    _curProdRow.D8 = text;
+                    break;
+                case "D9":
+                    _curProdRow.D9 = text;
+                    break;
+                case "Description":
+                    _curProdRow.Description = text;
+                    break;
+                case "Disclaimer":
+                    _curProdRow.Disclaimer = text;
+                    break;
+                case "Distibutor_Only":
+                    _curProdRow.Distibutor_Only = text;
+                    break;
+                case "Distributor_View_Only":
+                    _curProdRow.Distributor_View_Only = text;
+                    break;
+                case "Dont_Make_Active":
+                    _curProdRow.Dont_Make_Active = text;
+                    break;
+                case "Imprint_Color":
+                    _curProdRow.Imprint_Color = text;
+                    break;
+                case "Imprint_Location":
+                    _curProdRow.Imprint_Location = text;
+                    break;
+                case "Imprint_Method":
+                    _curProdRow.Imprint_Method = text;
+                    break;
+                case "Imprint_Size":
+                    _curProdRow.Imprint_Size = text;
+                    break;
+                case "Inventory_Link":
+                    _curProdRow.Inventory_Link = text;
+                    break;
+                case "Inventory_Quantity":
+                    _curProdRow.Inventory_Quantity = text;
+                    break;
+                case "Inventory_Status":
+                    _curProdRow.Inventory_Status = text;
+                    break;
+                case "Keywords":
+                    _curProdRow.Keywords = text;
+                    break;
+                case "Less_Than_Min":
+                    _curProdRow.Less_Than_Min = text;
+                    break;
+                case "Linename":
+                    _curProdRow.Linename = text;
+                    break;
+                case "Material":
+                    _curProdRow.Material = text;
+                    break;
+                case "Option_Additional_Info":
+                    _curProdRow.Option_Additional_Info = text;
+                    break;
+                case "Option_Name":
+                    _curProdRow.Option_Name = text;
+                    break;
+                case "Option_Type":
+                    _curProdRow.Option_Type = text;
+                    break;
+                case "Option_Values":
+                    _curProdRow.Option_Values = text;
+                    break;
+                case "Origin":
+                    _curProdRow.Origin = text;
+                    break;
+                case "P1":
+                    _curProdRow.P1 = text;
+                    break;
+                case "P10":
+                    _curProdRow.P10 = text;
+                    break;
+                case "P2":
+                    _curProdRow.P2 = text;
+                    break;
+                case "P3":
+                    _curProdRow.P3 = text;
+                    break;
+                case "P4":
+                    _curProdRow.P4 = text;
+                    break;
+                case "P5":
+                    _curProdRow.P5 = text;
+                    break;
+                case "P6":
+                    _curProdRow.P6 = text;
+                    break;
+                case "P7":
+                    _curProdRow.P7 = text;
+                    break;
+                case "P8":
+                    _curProdRow.P8 = text;
+                    break;
+                case "P9":
+                    _curProdRow.P9 = text;
+                    break;
+                case "Packaging":
+                    _curProdRow.Packaging = text;
+                    break;
+                case "Personalization":
+                    _curProdRow.Personalization = text;
+                    break;
+                case "Price_Includes":
+                    _curProdRow.Price_Includes = text;
+                    break;
+                case "Price_Type":
+                    _curProdRow.Price_Type = text;
+                    break;
+                case "Prod_Image":
+                    _curProdRow.Prod_Image = text;
+                    break;
+                case "Product_Color":
+                    _curProdRow.Product_Color = text;
+                    break;
+                case "Product_Data_Sheet":
+                    _curProdRow.Product_Data_Sheet = text;
+                    break;
+                case "Product_Inventory_Link":
+                    _curProdRow.Product_Inventory_Link = text;
+                    break;
+                case "Product_Inventory_Quantity":
+                    _curProdRow.Product_Inventory_Quantity = text;
+                    break;
+                case "Product_Inventory_Status":
+                    _curProdRow.Product_Inventory_Status = text;
+                    break;
+                case "Product_Name":
+                    _curProdRow.Product_Name = text;
+                    break;
+                case "Product_Number":
+                    _curProdRow.Product_Number = text;
+                    break;
+                case "Product_Number_Criteria_1":
+                    _curProdRow.Product_Number_Criteria_1 = text;
+                    break;
+                case "Product_Number_Criteria_2":
+                    _curProdRow.Product_Number_Criteria_2 = text;
+                    break;
+                case "Product_Number_Other":
+                    _curProdRow.Product_Number_Other = text;
+                    break;
+                case "Product_Number_Price":
+                    _curProdRow.Product_Number_Price = text;
+                    break;
+                case "Product_Sample":
+                    _curProdRow.Product_Sample = text;
+                    break;
+                case "Product_SKU":
+                    _curProdRow.Product_SKU = text;
+                    break;
+                case "Production_Time":
+                    _curProdRow.Production_Time = text;
+                    break;
+                case "Q1":
+                    _curProdRow.Q1 = text;
+                    break;
+                case "Q10":
+                    _curProdRow.Q10 = text;
+                    break;
+                case "Q2":
+                    _curProdRow.Q2 = text;
+                    break;
+                case "Q3":
+                    _curProdRow.Q3 = text;
+                    break;
+                case "Q4":
+                    _curProdRow.Q4 = text;
+                    break;
+                case "Q5":
+                    _curProdRow.Q5 = text;
+                    break;
+                case "Q6":
+                    _curProdRow.Q6 = text;
+                    break;
+                case "Q7":
+                    _curProdRow.Q7 = text;
+                    break;
+                case "Q8":
+                    _curProdRow.Q8 = text;
+                    break;
+                case "Q9":
+                    _curProdRow.Q9 = text;
+                    break;
+                case "QUR_Flag":
+                    _curProdRow.QUR_Flag = text;
+                    break;
+                case "Req_for_order":
+                    _curProdRow.Req_for_order = text;
+                    break;
+                case "Rush_Service":
+                    _curProdRow.Rush_Service = text;
+                    break;
+                case "Rush_Time":
+                    _curProdRow.Rush_Time = text;
+                    break;
+                case "Safety_Warnings":
+                    _curProdRow.Safety_Warnings = text;
+                    break;
+                case "Same_Day_Service":
+                    _curProdRow.Same_Day_Service = text;
+                    break;
+                case "SEO_FLG":
+                    _curProdRow.SEO_FLG = text;
+                    break;
+                case "Shape":
+                    _curProdRow.Shape = text;
+                    break;
+                case "Ship_Plain_Box":
+                    _curProdRow.Ship_Plain_Box = text;
+                    break;
+                case "Shipper_Bills_By":
+                    _curProdRow.Shipper_Bills_By = text;
+                    break;
+                case "Shipping_Dimensions":
+                    _curProdRow.Shipping_Dimensions = text;
+                    break;
+                case "Shipping_Info":
+                    _curProdRow.Shipping_Info = text;
+                    break;
+                case "Shipping_Items":
+                    _curProdRow.Shipping_Items = text;
+                    break;
+                case "Shipping_Weight":
+                    _curProdRow.Shipping_Weight = text;
+                    break;
+                case "Size_Group":
+                    _curProdRow.Size_Group = text;
+                    break;
+                case "Size_Values":
+                    _curProdRow.Size_Values = text;
+                    break;
+                case "SKU":
+                    _curProdRow.SKU = text;
+                    break;
+                case "SKU_Based_On":
+                    _curProdRow.SKU_Based_On = text;
+                    break;
+                case "SKU_Criteria_1":
+                    _curProdRow.SKU_Criteria_1 = text;
+                    break;
+                case "SKU_Criteria_2":
+                    _curProdRow.SKU_Criteria_2 = text;
+                    break;
+                case "SKU_Criteria_3":
+                    _curProdRow.SKU_Criteria_3 = text;
+                    break;
+                case "SKU_Criteria_4":
+                    _curProdRow.SKU_Criteria_4 = text;
+                    break;
+                case "Sold_Unimprinted":
+                    _curProdRow.Sold_Unimprinted = text;
+                    break;
+                case "Spec_Sample":
+                    _curProdRow.Spec_Sample = text;
+                    break;
+                case "Summary":
+                    _curProdRow.Summary = text;
+                    break;
+                case "Theme":
+                    _curProdRow.Theme = text;
+                    break;
+                case "Tradename":
+                    _curProdRow.Tradename = text;
+                    break;
+                case "U_QUR_Flag":
+                    _curProdRow.U_QUR_Flag = text;
+                    break;
+                case "UD1":
+                    _curProdRow.UD1 = text;
+                    break;
+                case "UD10":
+                    _curProdRow.UD10 = text;
+                    break;
+                case "UD2":
+                    _curProdRow.UD2 = text;
+                    break;
+                case "UD3":
+                    _curProdRow.UD3 = text;
+                    break;
+                case "UD4":
+                    _curProdRow.UD4 = text;
+                    break;
+                case "UD5":
+                    _curProdRow.UD5 = text;
+                    break;
+                case "UD6":
+                    _curProdRow.UD6 = text;
+                    break;
+                case "UD7":
+                    _curProdRow.UD7 = text;
+                    break;
+                case "UD8":
+                    _curProdRow.UD8 = text;
+                    break;
+                case "UD9":
+                    _curProdRow.UD9 = text;
+                    break;
+                case "UP1":
+                    _curProdRow.UP1 = text;
+                    break;
+                case "UP10":
+                    _curProdRow.UP10 = text;
+                    break;
+                case "UP2":
+                    _curProdRow.UP2 = text;
+                    break;
+                case "UP3":
+                    _curProdRow.UP3 = text;
+                    break;
+                case "UP4":
+                    _curProdRow.UP4 = text;
+                    break;
+                case "UP5":
+                    _curProdRow.UP5 = text;
+                    break;
+                case "UP6":
+                    _curProdRow.UP6 = text;
+                    break;
+                case "UP7":
+                    _curProdRow.UP7 = text;
+                    break;
+                case "UP8":
+                    _curProdRow.UP8 = text;
+                    break;
+                case "UP9":
+                    _curProdRow.UP9 = text;
+                    break;
+                case "Upcharge_Criteria_1":
+                    _curProdRow.Upcharge_Criteria_1 = text;
+                    break;
+                case "Upcharge_Criteria_2":
+                    _curProdRow.Upcharge_Criteria_2 = text;
+                    break;
+                case "Upcharge_Details":
+                    _curProdRow.Upcharge_Details = text;
+                    break;
+                case "Upcharge_Level":
+                    _curProdRow.Upcharge_Level = text;
+                    break;
+                case "Upcharge_Name":
+                    _curProdRow.Upcharge_Name = text;
+                    break;
+                case "Upcharge_Type":
+                    _curProdRow.Upcharge_Type = text;
+                    break;
+                case "UQ1":
+                    _curProdRow.UQ1 = text;
+                    break;
+                case "UQ10":
+                    _curProdRow.UQ10 = text;
+                    break;
+                case "UQ2":
+                    _curProdRow.UQ2 = text;
+                    break;
+                case "UQ3":
+                    _curProdRow.UQ3 = text;
+                    break;
+                case "UQ4":
+                    _curProdRow.UQ4 = text;
+                    break;
+                case "UQ5":
+                    _curProdRow.UQ5 = text;
+                    break;
+                case "UQ6":
+                    _curProdRow.UQ6 = text;
+                    break;
+                case "UQ7":
+                    _curProdRow.UQ7 = text;
+                    break;
+                case "UQ8":
+                    _curProdRow.UQ8 = text;
+                    break;
+                case "UQ9":
+                    _curProdRow.UQ9 = text;
+                    break;
+                case "XID":
+                    _curProdRow.XID = text;
+                    break;
+
+            }
+        }
+
 
         /// <summary>
         /// converts an excel column reference value (e.g., "A", "AZ", "Q") into column index.
@@ -1034,7 +1599,7 @@ namespace ImportPOC2
 
                 if (priceTypeFound != null)
                 {
-                    _currentProduct.CostTypeCode = BasicStringFieldProcessor.UpdateField(text, _currentProduct.CostTypeCode);
+                    _currentProduct.CostTypeCode = BasicFieldProcessor.UpdateField(text, _currentProduct.CostTypeCode);
                 }
                 else 
                 {
@@ -1060,11 +1625,11 @@ namespace ImportPOC2
 
                     if (currencyFound != null)
                     {
-                        foreach (PriceGrid priceGrid in _currentProduct.PriceGrids)
+                        foreach (var priceGrid in _currentProduct.PriceGrids)
                         {
                             if (priceGrid.Currency.Code != currencyFound.Code)
                             {
-                                priceGrid.Currency = new Currency
+                                priceGrid.Currency = new Radar.Models.Pricing.Currency
                                 {
                                     Code = currencyFound.Code,
                                     Number = currencyFound.Number
@@ -1193,7 +1758,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                _currentProduct.IsOrderLessThanMinimumAllowed = BasicStringFieldProcessor.UpdateField(text, _currentProduct.IsOrderLessThanMinimumAllowed);
+                _currentProduct.IsOrderLessThanMinimumAllowed = BasicFieldProcessor.UpdateField(text, _currentProduct.IsOrderLessThanMinimumAllowed);
             }
         }
 
@@ -1254,7 +1819,7 @@ namespace ImportPOC2
                 var inventoryStatusFound = inventoryStatusesLookup.FirstOrDefault(t => t.Value == text);
                 if (inventoryStatusFound != null)
                 {
-                    _currentProduct.ProductLevelInventoryStatusCode = BasicStringFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryStatusCode);
+                    _currentProduct.ProductLevelInventoryStatusCode = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryStatusCode);
                 }
                 else
                 {
@@ -1267,13 +1832,15 @@ namespace ImportPOC2
         private static void processProductSKU(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.ProductLevelSku = BasicStringFieldProcessor.UpdateField(text, _currentProduct.ProductLevelSku);
+                _currentProduct.ProductLevelSku = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelSku);
         }
 
         private static void processInventoryQty(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.ProductLevelInventoryQuantity = Convert.ToInt32(BasicStringFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryQuantity.ToString()));
+            {
+                _currentProduct.ProductLevelInventoryQuantity = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryQuantity);
+            }
         }
 
         private static void processCatalogInfo(string text)
@@ -1294,33 +1861,33 @@ namespace ImportPOC2
         private static void processDistributorOnlyComment(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.DistributorComments = BasicStringFieldProcessor.UpdateField(text, _currentProduct.DistributorComments);
+                _currentProduct.DistributorComments = BasicFieldProcessor.UpdateField(text, _currentProduct.DistributorComments);
         }
 
         private static void processProductDisclaimer(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Disclaimer = BasicStringFieldProcessor.UpdateField(text, _currentProduct.Disclaimer);
+                _currentProduct.Disclaimer = BasicFieldProcessor.UpdateField(text, _currentProduct.Disclaimer);
         }
 
         private static void processConfirmationDate(string text)
         {
             if (_firstRowForProduct)
             {              
-                _currentProduct.PriceConfirmationDate = BasicStringFieldProcessor.UpdateField(text, _currentProduct.PriceConfirmationDate);
+                _currentProduct.PriceConfirmationDate = BasicFieldProcessor.UpdateField(text, _currentProduct.PriceConfirmationDate);
             }
         }
 
         private static void processAdditionalProductInfo(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.AdditionalInfo = BasicStringFieldProcessor.UpdateField(text, _currentProduct.AdditionalInfo);
+                _currentProduct.AdditionalInfo = BasicFieldProcessor.UpdateField(text, _currentProduct.AdditionalInfo);
         }
 
         private static void processAdditionalShippingInfo(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.AddtionalShippingInfo = BasicStringFieldProcessor.UpdateField(text, _currentProduct.AddtionalShippingInfo);
+                _currentProduct.AddtionalShippingInfo = BasicFieldProcessor.UpdateField(text, _currentProduct.AddtionalShippingInfo);
         }
 
         private static void processMaterials(string text)
@@ -1624,31 +2191,31 @@ namespace ImportPOC2
         private static void processInventoryLink(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.ProductLevelInventoryLink = BasicStringFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryLink);
+                _currentProduct.ProductLevelInventoryLink = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryLink);
         }
 
         private static void processSummary(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Summary = BasicStringFieldProcessor.UpdateField(text, _currentProduct.Summary);
+                _currentProduct.Summary = BasicFieldProcessor.UpdateField(text, _currentProduct.Summary);
         }
 
         private static void processDescription(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Description = BasicStringFieldProcessor.UpdateField(text, _currentProduct.Description);
+                _currentProduct.Description = BasicFieldProcessor.UpdateField(text, _currentProduct.Description);
         }
 
         private static void processProductNumber(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.AsiProdNo = BasicStringFieldProcessor.UpdateField(text, _currentProduct.AsiProdNo);
+                _currentProduct.AsiProdNo = BasicFieldProcessor.UpdateField(text, _currentProduct.AsiProdNo);
         }
 
         private static void processProductName(string text)
         {
             if (_firstRowForProduct)
-                _currentProduct.Name = BasicStringFieldProcessor.UpdateField(text, _currentProduct.Name);
+                _currentProduct.Name = BasicFieldProcessor.UpdateField(text, _currentProduct.Name);
         }        
 
         private static void finishProduct()
