@@ -25,4 +25,15 @@ namespace ImportPOC2
         public string Code { get; set; }
         public ICollection<SetCodeValue> SetCodeValues { get; set; }
     }
+
+    public class ImprintCriteriaLookUp
+    {
+        public ImprintCriteriaLookUp()
+        {
+            CodeValueGroups = new List<CodeValueGroup>();
+        }
+
+        public string Code { get; set; }
+        public ICollection<CodeValueGroup> CodeValueGroups { get; set; }        
+    }
 }
