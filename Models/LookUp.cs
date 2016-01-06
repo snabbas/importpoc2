@@ -3,6 +3,12 @@ using Radar.Models.Criteria;
 
 namespace ImportPOC2
 {
+    public class CodeValueLookUp
+    {
+        public string Code { get; set; }
+        public string Value { get; set; }
+    }
+
     public class GenericLookUp
     {
         public string CodeValue { get; set; }
@@ -19,6 +25,12 @@ namespace ImportPOC2
     {
         public int Number { get; set; }
         public string Code { get; set; }
+    }
+
+    public class SafetyWarningLookUp
+    {
+        public string Key { get; set; }
+        public string Value { get; set; }
     }
 
     public class CostTypeLookUp

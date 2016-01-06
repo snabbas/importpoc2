@@ -73,6 +73,8 @@ namespace ImportPOC2
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
                         _colorGroupList = JsonConvert.DeserializeObject<List<ProductColorGroup>>(content);
+
+
                     }
                 }
                 return _colorGroupList;
@@ -181,8 +183,8 @@ namespace ImportPOC2
             set { _complianceLookup = value; }
         }
 
-        private static List<KeyValueLookUp> _safetywarningsLookup = null;
-        private static List<KeyValueLookUp> safetywarningsLookup
+        private static List<SafetyWarningLookUp> _safetywarningsLookup = null;
+        private static List<SafetyWarningLookUp> safetywarningsLookup
         {
             get
             {
@@ -192,7 +194,7 @@ namespace ImportPOC2
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        _safetywarningsLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+                        _safetywarningsLookup = JsonConvert.DeserializeObject<List<SafetyWarningLookUp>>(content);
                     }
                 }
                 return _safetywarningsLookup;
@@ -255,6 +257,28 @@ namespace ImportPOC2
                 return _inventoryStatusesLookup;
             }
             set { _inventoryStatusesLookup = value; }
+        }
+        
+        private static List<CriteriaAttribute> _criteriaAttributeLookup = null;
+        private static CriteriaAttribute criteriaAttributeLookup(string code, string name)
+        {
+            CriteriaAttribute criteriaAttribute = new CriteriaAttribute();
+            if (_criteriaAttributeLookup == null)
+            {
+                var results = RadarHttpClient.GetAsync("lookup/criteria_attributes").Result;
+                if (results.IsSuccessStatusCode)
+                {
+                    var content = results.Content.ReadAsStringAsync().Result;
+                    _criteriaAttributeLookup = JsonConvert.DeserializeObject<List<CriteriaAttribute>>(content);
+                }
+            }           
+
+            if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name))
+            {
+                criteriaAttribute = _criteriaAttributeLookup.Where(u => u.CriteriaCode == code && u.Description == name).FirstOrDefault();                 
+            }
+
+            return criteriaAttribute;           
         }        
 
         private static log4net.ILog _log;
@@ -514,7 +538,7 @@ namespace ImportPOC2
             //rush time
             //same day
             processPackagingOptions(_curProdRow.Packaging);
-            //shipping items (shipping estimator)
+            processShippingItems(_curProdRow.Shipping_Items);           
             //shipping dimensions
             //shipping weight
             //shipping bills by
@@ -1349,6 +1373,70 @@ namespace ImportPOC2
             }
         }
 
+        private static void processShippingItems(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                string criteriaCode = "SHES";
+                var shippingItems = text.Split(':');              
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+
+                if (criteriaSet == null)
+                {
+                    criteriaSet = AddCriteriaSet(criteriaCode);
+                }
+                else
+                {
+                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                }
+
+                if (shippingItems.Length == 2)
+                {
+                    var items = shippingItems[0];
+                    var unit = shippingItems[1];
+                    var criteriaAttribute = criteriaAttributeLookup("SHES", "Unit");
+                    var unitFound = criteriaAttribute.UnitsOfMeasure.Where(u => u.DisplayName == unit).FirstOrDefault();
+                    if (unitFound != null)
+                    {
+                        var exists = existingCsvalues.Select(v => v.Value).SingleOrDefault();
+                        //add new value if it doesn't exists
+                        if (exists != null)
+                        {
+                            if ( exists.UnitValue != items)
+                                exists.UnitValue = items;
+                            if (exists.UnitOfMeasureCode != unit)
+                                exists.UnitOfMeasureCode = unit;
+                        }
+                        else
+                        {
+                            var value = new
+                            {
+                                CriteriaAttributeId = criteriaAttribute.ID,
+                                UnitValue = items,
+                                UnitOfMeasureCode = unit
+                            };
+                            
+                            var group = criteriaAttribute.CriteriaItem.CodeValueGroups.FirstOrDefault();
+                            var SetCodeValueId = 0L;
+                            if (group != null)
+                            {
+                                SetCodeValueId = group.SetCodeValues.FirstOrDefault().ID;
+                            }
+
+                            createNewValue(criteriaCode, value, SetCodeValueId, "CUST");
+                        }
+                    }
+                    else
+                    {
+                        //log batch error
+                        AddValidationError(criteriaCode, unit);
+                        _hasErrors = true;
+                    }
+                }
+            }
+        }
+
         private static void processPackagingOptions(string text)
         {
             //comma delimited list of packaging options
@@ -1451,12 +1539,72 @@ namespace ImportPOC2
 
         private static void processSafetyWarnings(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+            {
+                var safetyWarnings = extractCsvList(text);
+
+                if (_currentProduct.SelectedSafetyWarnings == null)
+                    _currentProduct.SelectedSafetyWarnings = new Collection<SafetyWarning>();
+
+                safetyWarnings.ForEach(curSafetyWarning =>
+                {
+                    //need to lookup safetyWarnings
+                    var safetyWarning = safetywarningsLookup.FirstOrDefault(c => c.Value == curSafetyWarning);
+                    if (safetyWarning != null)
+                    {
+                        var existing = _currentProduct.SelectedSafetyWarnings.FirstOrDefault(c => c.Description == safetyWarning.Value);
+                        if (existing == null)
+                        {
+                            var newSafetyWarning = new SafetyWarning { Code = safetyWarning.Key, WarningText = safetyWarning.Value };
+                            _currentProduct.SelectedSafetyWarnings.Add(newSafetyWarning);
+                        }
+                        else
+                        {
+                            //s/b nothing to do? 
+                        }
+                    }
+                });
+
+                //remove any safety Warnings from product that aren't on the sheet; get list of codes from the sheet 
+                var sheetSafetyWarningsList = safetyWarnings.Join(safetywarningsLookup, saf => saf, lookup => lookup.Value, (saf, lookup) => lookup.Value);
+                var toRemove = _currentProduct.SelectedSafetyWarnings.Where(c => !sheetSafetyWarningsList.Contains(c.Description)).ToList();
+                toRemove.ForEach(r => _currentProduct.SelectedSafetyWarnings.Remove(r));
+            }
         }
 
         private static void processComplianceCertifications(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+            {
+                var complianceCertifications = extractCsvList(text);
+
+                if (_currentProduct.SelectedComplianceCerts == null)
+                    _currentProduct.SelectedComplianceCerts = new Collection<ProductComplianceCert>();
+
+                complianceCertifications.ForEach(curCert =>
+                {
+                    //need to lookup complianceCertifications
+                    var ComplianceCert = complianceLookup.FirstOrDefault(c => c.Value == curCert);
+                    if (ComplianceCert != null)
+                    {
+                        var existing = _currentProduct.SelectedComplianceCerts.FirstOrDefault(c => c.Description == ComplianceCert.Value);
+                        if (existing == null)
+                        {
+                            var newComplianceCert = new ProductComplianceCert { ComplianceCertId = Convert.ToInt32(ComplianceCert.Key), Description = ComplianceCert.Value };
+                            _currentProduct.SelectedComplianceCerts.Add(newComplianceCert);
+                        }
+                        else
+                        {
+                            //s/b nothing to do? 
+                        }
+                    }
+                });
+
+                //remove any ComplianceCert from product that aren't on the sheet; get list of codes from the sheet 
+                var sheetComplianceCertList = complianceCertifications.Join(complianceLookup, cer => cer, lookup => lookup.Value, (cer, lookup) => lookup.Value);
+                var toRemove = _currentProduct.SelectedComplianceCerts.Where(c => !sheetComplianceCertList.Contains(c.Description)).ToList();
+                toRemove.ForEach(r => _currentProduct.SelectedComplianceCerts.Remove(r));
+            }
         }
 
         private static void processLineNames(string text)
@@ -1502,7 +1650,12 @@ namespace ImportPOC2
 
         private static void processProductDataSheet(string text)
         {
-            //throw new NotImplementedException();
+            if (_firstRowForProduct)
+
+                if (_currentProduct.ProductDataSheet == null)
+                    _currentProduct.ProductDataSheet = new ProductDataSheet();
+
+                _currentProduct.ProductDataSheet.Url = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductDataSheet.Url);
         }
 
         private static void processDistributorOnlyViewFlag(string text)
@@ -1646,7 +1799,7 @@ namespace ImportPOC2
             }
         }
 
-        private static void createNewValue(string criteriaCode, string value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "")
+        private static void createNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "")
         {
             var cSet = getCriteriaSetByCode(criteriaCode, optionName);
 
