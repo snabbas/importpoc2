@@ -1,4 +1,5 @@
-﻿using DocumentFormat.OpenXml.Packaging;
+﻿using System.Configuration;
+using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
 using ImportPOC2.Processors;
@@ -34,346 +35,11 @@ namespace ImportPOC2
         private static int _companyId;
         private static Batch _curBatch;
         private static UowPRODTask _prodTask;
-        private static readonly HttpClient RadarHttpClient = new HttpClient {BaseAddress = new Uri("http://local-espupdates.asicentral.com/api/api/")};
+        private static HttpClient _radarHttpClient;
         private static Product _currentProduct;
         private static bool _firstRowForProduct = true;
         private static int _globalUniqueId = 0;
         private static bool _publishCurrentProduct = true;
-
-        private static List<Category> _catlist = null;
-        private static List<Category> categoryList
-        {
-            get
-            {
-                if (_catlist == null)
-                {
-
-                    var results = RadarHttpClient.GetAsync("lookup/product_categories").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _catlist = JsonConvert.DeserializeObject<List<Category>>(content);
-                    }
-
-                }
-                return _catlist;
-            }
-            set { _catlist = value; }
-        }
-
-        private static List<ProductColorGroup> _colorGroupList = null;
-        private static List<ProductColorGroup> colorGroupList
-        {
-            get
-            {
-                if (_colorGroupList == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/colors").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _colorGroupList = JsonConvert.DeserializeObject<List<ProductColorGroup>>(content);
-
-
-                    }
-                }
-                return _colorGroupList;
-            }
-            set { _colorGroupList = value; }
-        }
-
-        private static List<KeyValueLookUp> _shapesLookup = null;
-        private static List<KeyValueLookUp> shapesLookup
-        {
-            get
-            {
-                if (_shapesLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/shapes").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _shapesLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
-                    }
-                }
-                return _shapesLookup;
-            }
-            set { _shapesLookup = value; }
-        }
-
-        private static List<SetCodeValue> _themesLookup = null;
-        private static List<SetCodeValue> themesLookup
-        {
-            get
-            {
-                if (_themesLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/themes").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        var themeGroups = JsonConvert.DeserializeObject<List<ThemeLookUp>>(content);
-                        _themesLookup = new List<SetCodeValue>();
-
-                        themeGroups.ForEach(t => _themesLookup.AddRange(t.SetCodeValues));
-                    }
-                }
-                return _themesLookup;
-            }
-            set { _themesLookup = value; }
-        }
-
-        private static List<GenericLookUp> _originsLookup = null;
-        private static List<GenericLookUp> originsLookup
-        {
-            get
-            {
-                if (_originsLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/origins").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _originsLookup = JsonConvert.DeserializeObject<List<GenericLookUp>>(content);
-                    }
-                }
-                return _originsLookup;
-            }
-            set { _originsLookup = value; }
-        }
-
-        private static List<KeyValueLookUp> _packagingLookup = null;
-        private static List<KeyValueLookUp> packagingLookup
-        {
-            get
-            {
-                if (_packagingLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/packaging").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _packagingLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
-                    }
-                }
-                return _packagingLookup;
-            }
-            set { _packagingLookup = value; }
-        }
-
-        private static List<KeyValueLookUp> _complianceLookup = null;
-        private static List<KeyValueLookUp> complianceLookup
-        {
-            get
-            {
-                if (_complianceLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/compliance").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _complianceLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
-                    }
-                }
-                return _complianceLookup;
-            }
-            set { _complianceLookup = value; }
-        }
-
-        private static List<SafetyWarningLookUp> _safetywarningsLookup = null;
-        private static List<SafetyWarningLookUp> safetywarningsLookup
-        {
-            get
-            {
-                if (_safetywarningsLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/safetywarnings").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _safetywarningsLookup = JsonConvert.DeserializeObject<List<SafetyWarningLookUp>>(content);
-                    }
-                }
-                return _safetywarningsLookup;
-            }
-            set { _safetywarningsLookup = value; }
-        }
-
-        private static List<CurrencyLookUp> _currencyLookup = null;
-        private static List<CurrencyLookUp> currencyLookup
-        {
-            get
-            {
-                if (_currencyLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/currency").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _currencyLookup = JsonConvert.DeserializeObject<List<CurrencyLookUp>>(content);
-                    }
-                }
-                return _currencyLookup;
-            }
-            set { _currencyLookup = value; }
-        }
-
-        private static List<CostTypeLookUp> _costTypesLookup = null;
-        private static List<CostTypeLookUp> costTypesLookup
-        {
-            get
-            {
-                if (_costTypesLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/cost_types").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _costTypesLookup = JsonConvert.DeserializeObject<List<CostTypeLookUp>>(content);
-                    }
-                }
-                return _costTypesLookup;
-            }
-            set { _costTypesLookup = value; }
-        }
-
-        private static List<KeyValueLookUp> _inventoryStatusesLookup = null;
-        private static List<KeyValueLookUp> inventoryStatusesLookup
-        {
-            get
-            {
-                if (_inventoryStatusesLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/inventory_statuses").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _inventoryStatusesLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
-                    }
-                }
-                return _inventoryStatusesLookup;
-            }
-            set { _inventoryStatusesLookup = value; }
-        }
-        
-        private static List<CriteriaAttribute> _criteriaAttributeLookup = null;
-        private static CriteriaAttribute criteriaAttributeLookup(string code, string name)
-        {
-            var criteriaAttribute = new CriteriaAttribute();
-            if (_criteriaAttributeLookup == null)
-            {
-                var results = RadarHttpClient.GetAsync("lookup/criteria_attributes").Result;
-                if (results.IsSuccessStatusCode)
-                {
-                    var content = results.Content.ReadAsStringAsync().Result;
-                    _criteriaAttributeLookup = JsonConvert.DeserializeObject<List<CriteriaAttribute>>(content);
-                }
-            }           
-
-            if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name))
-            {
-                if (_criteriaAttributeLookup != null)
-                    criteriaAttribute = _criteriaAttributeLookup.FirstOrDefault(u => u.CriteriaCode == code && u.Description == name);
-            }
-
-            return criteriaAttribute;           
-        }        
-
-        private static List<ImprintCriteriaLookUp> _imprintCriteriaLookup = null;
-        private static List<ImprintCriteriaLookUp> imprintCriteriaLookup
-        {
-            get
-            {
-                if (_imprintCriteriaLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/criteria?code=IMPR").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _imprintCriteriaLookup = JsonConvert.DeserializeObject<List<ImprintCriteriaLookUp>>(content);
-                    }
-                }
-                return _imprintCriteriaLookup;
-            }
-            set { _imprintCriteriaLookup = value; }
-        }
-
-        private static List<LineName> _linenamesLookup = null;
-        private static List<LineName> linenamesLookup
-        {
-            get
-            {
-                if (_linenamesLookup == null)
-                {
-                    long companyId = _currentProduct.CompanyId;
-                    var results = RadarHttpClient.GetAsync("lookup/linenames?company_id=" + companyId).Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _linenamesLookup = JsonConvert.DeserializeObject<List<LineName>>(content);
-                    }
-                }
-                return _linenamesLookup;
-            }
-            set { linenamesLookup = value; }
-        }
-
-        private static List<CriteriaItem> _imprintColorLookup = null;
-        private static List<CriteriaItem> imprintColorLookup
-        {
-            get
-            {
-                if (_imprintCriteriaLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/criteria?code=COLR").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _imprintColorLookup = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);
-                    }
-                }
-                return _imprintColorLookup;
-            }
-            set { _imprintColorLookup = value; }
-        }
-
-        private static List<GenericLookUp> _imprintMethodsLookup = null;
-        private static List<GenericLookUp> imprintMethodsLookup
-        {
-            get
-            {
-                if (_imprintMethodsLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/imprint_methods").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _imprintMethodsLookup = JsonConvert.DeserializeObject<List<GenericLookUp>>(content);
-                    }
-                }
-                return _imprintMethodsLookup;
-            }
-            set { _imprintMethodsLookup = value; }
-        }
-
-        private static List<CriteriaItem> _imprintSizeLocation = null;
-        private static List<CriteriaItem> imprintSizeLocation
-        {
-            get
-            {
-                if (_imprintSizeLocation == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/criteria?code=IMSZ").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _imprintColorLookup = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);
-                    }
-                }
-                return _imprintSizeLocation;
-            }
-            set { _imprintSizeLocation = value; }
-        }
 
         private static log4net.ILog _log;
         private static bool _hasErrors = false;
@@ -383,18 +49,24 @@ namespace ImportPOC2
         {
             _log = log4net.LogManager.GetLogger(typeof(Program));
 
-            //onetime stuff
-            RadarHttpClient.DefaultRequestHeaders.Accept.Clear();
-            RadarHttpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            //get service location from config 
+            var baseUri = ConfigurationManager.AppSettings["radarApiLocation"] ?? string.Empty;
+            _radarHttpClient = new HttpClient { BaseAddress = new Uri(baseUri) };
 
-            //get directory from config
-            //TODO: change this to read from config
+            //onetime stuff
+            _radarHttpClient.DefaultRequestHeaders.Accept.Clear();
+            _radarHttpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            Lookups.RadarHttpClient = _radarHttpClient;
 
             //NOTES: 
             //file name is batch ID - use to retreive batch to assign details. 
             // also use to determine company ID of sheet. 
 
-            var curDir = Directory.GetCurrentDirectory();
+            //get directory from config
+            //TODO: change this to read from config
+            //var curDir = Directory.GetCurrentDirectory();
+            var curDir = ConfigurationManager.AppSettings["excelFileLocation"] ?? string.Empty;
 
             _log.InfoFormat("running in {0}", curDir);
 
@@ -435,6 +107,8 @@ namespace ImportPOC2
             //get batch: 
             var batchId = getBatchId(xlsxFile);
             _curBatch = getBatchById(batchId);
+            //as batch has changed, so has company ID, so ensure company-specific lookups are appropriately updated
+            Lookups.CurrentCompanyId = _companyId;
 
             if (_curBatch == null)
             {
@@ -1175,7 +849,7 @@ namespace ImportPOC2
 
             try
             {
-                var results = RadarHttpClient.GetAsync(endpointUrl).Result;
+                var results = _radarHttpClient.GetAsync(endpointUrl).Result;
 
                 if (results.IsSuccessStatusCode)
                 {
@@ -1224,7 +898,7 @@ namespace ImportPOC2
 
                 shapes.ForEach(s =>
                 {
-                    var shapeFound = shapesLookup.FirstOrDefault(l => l.Value == s);
+                    var shapeFound = Lookups.ShapesLookup.FirstOrDefault(l => l.Value == s);
                     if (shapeFound != null)
                     {
                         var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == s.ToLower());
@@ -1266,8 +940,8 @@ namespace ImportPOC2
                 //}
 
                 themes.ForEach(theme =>
-                {                    
-                    var themeFound = themesLookup.FirstOrDefault(t => t.CodeValue.ToLower() == theme.ToLower());
+                {
+                    var themeFound = Lookups.ThemesLookup.FirstOrDefault(t => t.CodeValue.ToLower() == theme.ToLower());
 
                     if (themeFound != null)
                     {
@@ -1344,7 +1018,7 @@ namespace ImportPOC2
                     text = "List";
                 }
 
-                var priceTypeFound = costTypesLookup.FirstOrDefault(t => t.Code == text);
+                var priceTypeFound = Lookups.CostTypesLookup.FirstOrDefault(t => t.Code == text);
 
                 if (priceTypeFound != null)
                 {
@@ -1370,7 +1044,7 @@ namespace ImportPOC2
                         text = "USD";
                     }
 
-                    var currencyFound = currencyLookup.FirstOrDefault(t => t.Code == text);
+                    var currencyFound = Lookups.CurrencyLookup.FirstOrDefault(t => t.Code == text);
 
                     if (currencyFound != null)
                     {
@@ -1414,7 +1088,7 @@ namespace ImportPOC2
 
                 origins.ForEach(org =>
                 {
-                    var originFound = originsLookup.FirstOrDefault(l => l.CodeValue.ToLower() == org.ToLower());
+                    var originFound = Lookups.OriginsLookup.FirstOrDefault(l => l.CodeValue.ToLower() == org.ToLower());
                     if (originFound != null)
                     {
                         var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == org.ToLower());
@@ -1459,7 +1133,7 @@ namespace ImportPOC2
                 {
                     var items = shippingItems[0];
                     var unit = shippingItems[1];
-                    var criteriaAttribute = criteriaAttributeLookup(criteriaCode, "Unit");
+                    var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Unit");
                     var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.DisplayName == unit);
                     if (unitFound != null)
                     {
@@ -1515,7 +1189,7 @@ namespace ImportPOC2
                 long customPackagingScvId = 0;
 
                 //get id for custom packaging
-                var customPackaging = packagingLookup.FirstOrDefault(p => p.Value == "Custom");
+                var customPackaging = Lookups.PackagingLookup.FirstOrDefault(p => p.Value == "Custom");
                 if (customPackaging != null)
                 {
                     customPackagingScvId = customPackaging.Key;
@@ -1532,7 +1206,7 @@ namespace ImportPOC2
 
                 packagingOptions.ForEach(pkg =>
                 {
-                    var packagingOptionFound = packagingLookup.FirstOrDefault(l => String.Equals(l.Value, pkg, StringComparison.CurrentCultureIgnoreCase));
+                    var packagingOptionFound = Lookups.PackagingLookup.FirstOrDefault(l => String.Equals(l.Value, pkg, StringComparison.CurrentCultureIgnoreCase));
                     if (packagingOptionFound != null)
                     {
                         var exists = existingCsvalues.Any(v => v.Value.ToLower() == pkg.ToLower());
@@ -1618,7 +1292,7 @@ namespace ImportPOC2
                 long imprintColorScvId = 0;
 
                 //get set code value id for imprint color
-                var imcl = imprintColorLookup.FirstOrDefault(i => i.Code == criteriaCode);
+                var imcl = Lookups.ImprintColorLookup.FirstOrDefault(i => i.Code == criteriaCode);
 
                 if (imcl != null)
                 {
@@ -1672,7 +1346,7 @@ namespace ImportPOC2
                 long soldUnimprintedScvId = 0;
 
                 //get set code value id for sold unimprinted
-                var unimprinted = imprintMethodsLookup.FirstOrDefault(i => i.CodeValue == "Unimprinted");
+                var unimprinted = Lookups.ImprintMethodsLookup.FirstOrDefault(i => i.CodeValue == "Unimprinted");
 
                 if (unimprinted != null)
                 {
@@ -1726,7 +1400,7 @@ namespace ImportPOC2
                 long customAddlLocScvId = 0;
 
                 //get id for custom additional location
-                var addlLoc = imprintCriteriaLookup.FirstOrDefault(i => i.Code == Constants.CriteriaCodes.AdditionaLocation);
+                var addlLoc = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => i.Code == Constants.CriteriaCodes.AdditionaLocation);
 
                 if (addlLoc != null)
                 {
@@ -1775,7 +1449,7 @@ namespace ImportPOC2
                 long customAddColScvId = 0;
 
                 //get id for custom additional color
-                var addlCol = imprintCriteriaLookup.FirstOrDefault(i => i.Code == Constants.CriteriaCodes.AdditionalColor);
+                var addlCol = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => i.Code == Constants.CriteriaCodes.AdditionalColor);
 
                 if (addlCol != null)
                 {
@@ -1824,7 +1498,7 @@ namespace ImportPOC2
                 safetyWarnings.ForEach(curSafetyWarning =>
                 {
                     //need to lookup safetyWarnings
-                    var safetyWarning = safetywarningsLookup.FirstOrDefault(c => c.Value == curSafetyWarning);
+                    var safetyWarning = Lookups.SafetywarningsLookup.FirstOrDefault(c => c.Value == curSafetyWarning);
                     if (safetyWarning != null)
                     {
                         var existing = _currentProduct.SelectedSafetyWarnings.FirstOrDefault(c => c.Description == safetyWarning.Value);
@@ -1841,7 +1515,7 @@ namespace ImportPOC2
                 });
 
                 //remove any safety Warnings from product that aren't on the sheet; get list of codes from the sheet 
-                var sheetSafetyWarningsList = safetyWarnings.Join(safetywarningsLookup, saf => saf, lookup => lookup.Value, (saf, lookup) => lookup.Value);
+                var sheetSafetyWarningsList = safetyWarnings.Join(Lookups.SafetywarningsLookup, saf => saf, lookup => lookup.Value, (saf, lookup) => lookup.Value);
                 var toRemove = _currentProduct.SelectedSafetyWarnings.Where(c => !sheetSafetyWarningsList.Contains(c.Description)).ToList();
                 toRemove.ForEach(r => _currentProduct.SelectedSafetyWarnings.Remove(r));
             }
@@ -1859,7 +1533,7 @@ namespace ImportPOC2
                 complianceCertifications.ForEach(curCert =>
                 {
                     //need to lookup complianceCertifications
-                    var complianceCert = complianceLookup.FirstOrDefault(c => c.Value == curCert);
+                    var complianceCert = Lookups.ComplianceLookup.FirstOrDefault(c => c.Value == curCert);
                     if (complianceCert != null)
                     {
                         var existing = _currentProduct.SelectedComplianceCerts.FirstOrDefault(c => c.Description == complianceCert.Value);
@@ -1876,7 +1550,7 @@ namespace ImportPOC2
                 });
 
                 //remove any ComplianceCert from product that aren't on the sheet; get list of codes from the sheet 
-                var sheetComplianceCertList = complianceCertifications.Join(complianceLookup, cer => cer, lookup => lookup.Value, (cer, lookup) => lookup.Value);
+                var sheetComplianceCertList = complianceCertifications.Join(Lookups.ComplianceLookup, cer => cer, lookup => lookup.Value, (cer, lookup) => lookup.Value);
                 var toRemove = _currentProduct.SelectedComplianceCerts.Where(c => !sheetComplianceCertList.Contains(c.Description)).ToList();
                 toRemove.ForEach(r => _currentProduct.SelectedComplianceCerts.Remove(r));
             }
@@ -1926,7 +1600,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                var inventoryStatusFound = inventoryStatusesLookup.FirstOrDefault(t => t.Value == text);
+                var inventoryStatusFound = Lookups.InventoryStatusesLookup.FirstOrDefault(t => t.Value == text);
                 if (inventoryStatusFound != null)
                 {
                     _currentProduct.ProductLevelInventoryStatusCode = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryStatusCode);
@@ -2075,14 +1749,14 @@ namespace ImportPOC2
                     }
                     // if colorname isn't recognized, then it gets "UNCLASSIFIED/other" grouping
                     var productColors = getCriteriaSetValuesByCode("PRCL");
-                    var colorObj = colorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => String.Equals(g.Description, colorName, StringComparison.CurrentCultureIgnoreCase));
+                    var colorObj = Lookups.ColorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => String.Equals(g.Description, colorName, StringComparison.CurrentCultureIgnoreCase));
                     var existing = productColors.FirstOrDefault(p => p.Value == aliasName);
 
                     long setCodeId = 0;
                     if (colorObj == null)
                     {
                         //they picked a color that doesn't exist, so we choose the "other" set code to assign it on the new value
-                        colorObj = colorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => string.Equals(g.Description, "Unclassified/Other", StringComparison.CurrentCultureIgnoreCase));
+                        colorObj = Lookups.ColorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => string.Equals(g.Description, "Unclassified/Other", StringComparison.CurrentCultureIgnoreCase));
                         if (colorObj != null)
                         {
                             setCodeId = colorObj.SetCodeValues.First().Id;
@@ -2256,7 +1930,7 @@ namespace ImportPOC2
                 categories.ForEach(curCat =>
                 {
                     //need to lookup categories
-                    var category = categoryList.FirstOrDefault(c => c.Name == curCat);
+                    var category = Lookups.CategoryList.FirstOrDefault(c => c.Name == curCat);
                     if (category != null)
                     {
 
@@ -2274,7 +1948,7 @@ namespace ImportPOC2
                 });
 
                 //remove any categories from product that aren't on the sheet; get list of codes from the sheet 
-                var sheetCategoryList = categories.Join(categoryList, cat => cat, lookup => lookup.Name, (cat, lookup) => lookup.Code);
+                var sheetCategoryList = categories.Join(Lookups.CategoryList, cat => cat, lookup => lookup.Name, (cat, lookup) => lookup.Code);
                 var toRemove = _currentProduct.SelectedProductCategories.Where(c => !sheetCategoryList.Contains(c.Code)).ToList();
                 toRemove.ForEach(r => _currentProduct.SelectedProductCategories.Remove(r));
             }

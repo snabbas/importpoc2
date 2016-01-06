@@ -1,7 +1,7 @@
 ﻿
 namespace ImportPOC2
 {
-    internal class Category
+    public class Category
     {
         public string Code { get; set; }
         public string Description { get; set; }
