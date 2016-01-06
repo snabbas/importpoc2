@@ -22,6 +22,7 @@ using System.Text.RegularExpressions;
 using ProductKeyword = Radar.Models.Product.ProductKeyword;
 using ProductMediaItem = Radar.Models.Product.ProductMediaItem;
 using Radar.Models.Pricing;
+using Radar.Models.Company;
 [assembly: log4net.Config.XmlConfigurator(Watch = true)]
 
 namespace ImportPOC2
@@ -256,6 +257,102 @@ namespace ImportPOC2
             }
             set { _inventoryStatusesLookup = value; }
         }        
+
+        private static List<ImprintCriteriaLookUp> _imprintCriteriaLookup = null;
+        private static List<ImprintCriteriaLookUp> imprintCriteriaLookup
+        {
+            get
+            {
+                if (_imprintCriteriaLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/criteria?code=IMPR").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _imprintCriteriaLookup = JsonConvert.DeserializeObject<List<ImprintCriteriaLookUp>>(content);
+                    }
+                }
+                return _imprintCriteriaLookup;
+            }
+            set { _imprintCriteriaLookup = value; }
+        }
+
+        private static List<LineName> _linenamesLookup = null;
+        private static List<LineName> linenamesLookup
+        {
+            get
+            {
+                if (_linenamesLookup == null)
+                {
+                    long companyId = _currentProduct.CompanyId;
+                    var results = RadarHttpClient.GetAsync("lookup/linenames?company_id=" + companyId).Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _linenamesLookup = JsonConvert.DeserializeObject<List<LineName>>(content);
+                    }
+                }
+                return _linenamesLookup;
+            }
+            set { linenamesLookup = value; }
+        }
+
+        private static List<CriteriaItem> _imprintColorLookup = null;
+        private static List<CriteriaItem> imprintColorLookup
+        {
+            get
+            {
+                if (_imprintCriteriaLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/criteria?code=COLR").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _imprintColorLookup = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);
+                    }
+                }
+                return _imprintColorLookup;
+            }
+            set { _imprintColorLookup = value; }
+        }
+
+        private static List<GenericLookUp> _imprintMethodsLookup = null;
+        private static List<GenericLookUp> imprintMethodsLookup
+        {
+            get
+            {
+                if (_imprintMethodsLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/imprint_methods").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _imprintMethodsLookup = JsonConvert.DeserializeObject<List<GenericLookUp>>(content);
+                    }
+                }
+                return _imprintMethodsLookup;
+            }
+            set { _imprintMethodsLookup = value; }
+        }
+
+        private static List<CriteriaItem> _imprintSizeLocation = null;
+        private static List<CriteriaItem> imprintSizeLocation
+        {
+            get
+            {
+                if (_imprintSizeLocation == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/criteria?code=IMSZ").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _imprintColorLookup = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);
+                    }
+                }
+                return _imprintSizeLocation;
+            }
+            set { _imprintSizeLocation = value; }
+        }
 
         private static log4net.ILog _log;
         private static bool _hasErrors = false;
@@ -501,12 +598,12 @@ namespace ImportPOC2
             processLineNames(_curProdRow.Linename);
             processImprintArtwork(_curProdRow.Artwork);
             processImprintColors(_curProdRow.Imprint_Color);
-            //sold unimprinted
+            processSoldUnimprinted(_curProdRow.Sold_Unimprinted);           
             //personalization
             processImprintSizes(_curProdRow.Imprint_Size);
             processImprintLocations(_curProdRow.Imprint_Location);
             processAdditionalColors(_curProdRow.Additional_Color);
-            processAdditionaLocations(_curProdRow.Additional_Location);
+            processAdditionalLocations(_curProdRow.Additional_Location);
             //product sample
             //spec sample
             //production time
@@ -1009,7 +1106,6 @@ namespace ImportPOC2
                 case "XID":
                     _curProdRow.XID = text;
                     break;
-
             }
         }
 
@@ -1109,7 +1205,7 @@ namespace ImportPOC2
                     var shapeFound = shapesLookup.FirstOrDefault(l => l.Value == s);
                     if (shapeFound != null)
                     {
-                        var exists = existingCsvalues.Any(v => v.BaseLookupValue == s);
+                        var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == s.ToLower());
                         //add new value if it doesn't exists
                         if (!exists)
                         {
@@ -1124,14 +1220,7 @@ namespace ImportPOC2
                     }
                 });
 
-                //delete values that are missing from the list in the file
-                var valuesToDelete = existingCsvalues.Select(e => e.BaseLookupValue).Except(shapes).Select(s => s).ToList();                
-
-                valuesToDelete.ForEach(e =>
-                {
-                    var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.BaseLookupValue == e);
-                    criteriaSet.CriteriaSetValues.Remove(toDelete);
-                });
+                DeleteCsValuesMissingFromTheModel(existingCsvalues, shapes, criteriaSet);
             }
         }
 
@@ -1156,11 +1245,11 @@ namespace ImportPOC2
 
                 themes.ForEach(theme =>
                 {                    
-                    var themeFound = themesLookup.FirstOrDefault(t => t.CodeValue == theme);
+                    var themeFound = themesLookup.FirstOrDefault(t => t.CodeValue.ToLower() == theme.ToLower());
 
                     if (themeFound != null)
                     {
-                        var exists = existingCsvalues.Any(v => v.BaseLookupValue == theme);
+                        var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == theme.ToLower());
                         //add new value if it doesn't exists
                         if (!exists)
                         {
@@ -1175,14 +1264,7 @@ namespace ImportPOC2
                     }
                 });
 
-                //delete values that are missing from the list in the file
-                var valuesToDelete = existingCsvalues.Select(e => e.BaseLookupValue).Except(themes).Select(t => t).ToList();
-
-                valuesToDelete.ForEach(e =>
-                {
-                    var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.BaseLookupValue == e);
-                    criteriaSet.CriteriaSetValues.Remove(toDelete);
-                });
+                DeleteCsValuesMissingFromTheModel(existingCsvalues, themes, criteriaSet);
             }
         }
 
@@ -1212,7 +1294,7 @@ namespace ImportPOC2
 
                     if (tradenameFound != null)
                     {                                       
-                        var exists = existingCsvalues.Any(v => v.BaseLookupValue == tradename);
+                        var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == tradename.ToLower());
                         //add new value if it doesn't exists
                         if (!exists)
                         {
@@ -1227,14 +1309,7 @@ namespace ImportPOC2
                     }
                 });
 
-                //delete values that are missing from the list in the file
-                var valuesToDelete = existingCsvalues.Select(e => e.BaseLookupValue).Except(tradenames).Select(t => t).ToList();
-
-                valuesToDelete.ForEach(e =>
-                {
-                    var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.BaseLookupValue == e);
-                    criteriaSet.CriteriaSetValues.Remove(toDelete);
-                });
+                DeleteCsValuesMissingFromTheModel(existingCsvalues, tradenames, criteriaSet);
             }
         }
 
@@ -1320,10 +1395,10 @@ namespace ImportPOC2
 
                 origins.ForEach(org =>
                 {
-                    var originFound = originsLookup.FirstOrDefault(l => l.CodeValue == org);
+                    var originFound = originsLookup.FirstOrDefault(l => l.CodeValue.ToLower() == org.ToLower());
                     if (originFound != null)
                     {
-                        var exists = existingCsvalues.Any(v => v.BaseLookupValue == org);
+                        var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == org.ToLower());
                         //add new value if it doesn't exists
                         if (!exists)
                         {
@@ -1338,14 +1413,7 @@ namespace ImportPOC2
                     }
                 });
 
-                //delete values that are missing from the list in the file
-                var valuesToDelete = existingCsvalues.Select(e => e.BaseLookupValue).Except(origins).Select(s => s).ToList();
-
-                valuesToDelete.ForEach(e =>
-                {
-                    var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.BaseLookupValue == e);
-                    criteriaSet.CriteriaSetValues.Remove(toDelete);
-                });
+                DeleteCsValuesMissingFromTheModel(existingCsvalues, origins, criteriaSet);
             }
         }
 
@@ -1395,14 +1463,7 @@ namespace ImportPOC2
                     }
                 });
 
-                //delete values that are missing from the list in the file
-                var valuesToDelete = existingCsvalues.Select(e => e.Value).Except(packagingOptions).Select(s => s).ToList();
-
-                valuesToDelete.ForEach(e =>
-                {
-                    var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == e);
-                    criteriaSet.CriteriaSetValues.Remove(toDelete);
-                });
+                DeleteCsValuesMissingFromTheModel(existingCsvalues, packagingOptions, criteriaSet);
             }
         }
 
@@ -1416,7 +1477,37 @@ namespace ImportPOC2
 
         private static void processImprintSizes(string text)
         {
-            //throw new NotImplementedException();
+            //comma delimited list of imprint sizes
+            //if (_firstRowForProduct)
+            //{
+            //    string criteriaCode = Constants.CriteriaCodes.ImprintSizeLocation;
+            //    var imprintSizes = extractCsvList(text);
+            //    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+            //    ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+            //    long customImprintSizeLocationScvId = 0;
+
+            //    //get id for imprint size location
+            //    var imsz = imprintSizeLocation.FirstOrDefault(i => i.Code == criteriaCode);
+            //    if (imsz != null)
+            //    {
+            //        var group = imsz.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+            //        if (group != null)
+            //        {
+            //            customImprintSizeLocationScvId = group.SetCodeValues.FirstOrDefault().ID;
+            //        }
+            //    }
+
+            //    if (criteriaSet == null)
+            //    {
+            //        criteriaSet = AddCriteriaSet(criteriaCode);
+            //    }
+            //    else
+            //    {
+            //        existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+            //    }                
+
+            //    DeleteCsValuesMissingFromTheModel(existingCsvalues, imprintSizes, criteriaSet);
+            //}
         }
 
         private static void processImprintMethods(string text)
@@ -1431,7 +1522,102 @@ namespace ImportPOC2
 
         private static void processImprintColors(string text)
         {
-            //throw new NotImplementedException();
+            //comma delimited list of imprint colors
+            if (_firstRowForProduct)
+            {
+                string criteriaCode = Constants.CriteriaCodes.ImprintColor;
+                var imprintColors = extractCsvList(text);
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                long imprintColorScvId = 0;
+
+                //get set code value id for imprint color
+                var imcl = imprintColorLookup.FirstOrDefault(i => i.Code == criteriaCode);
+
+                if (imcl != null)
+                {
+                    var group = imcl.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+
+                    if (group != null)
+                    {
+                        imprintColorScvId = group.SetCodeValues.FirstOrDefault().ID;
+                    }
+                }     
+
+                if (criteriaSet == null)
+                {
+                    criteriaSet = AddCriteriaSet(criteriaCode);
+                }
+                else
+                {
+                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                }
+
+                imprintColors.ForEach(l =>
+                {
+                    //check if the value already exists
+                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == l.ToLower());
+                    if (!exists)
+                    {
+                        //add new value if it doesn't exists                        
+                        createNewValue(criteriaCode, l, imprintColorScvId, "CUST");
+                    }
+                });
+
+                DeleteCsValuesMissingFromTheModel(existingCsvalues, imprintColors, criteriaSet);
+            }
+        }
+
+        private static void processSoldUnimprinted(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                //should be Y/N
+                var soldUnimprinted = text;
+                var validValues = new [] {"Y", "N"};
+                if (!string.IsNullOrWhiteSpace(soldUnimprinted) && !validValues.Contains(soldUnimprinted))
+                {
+                    AddValidationError("GNER", "invalid value for Sold Unimprinted");
+                    return;
+                }
+
+                long soldUnimprintedScvId = 0;
+
+                //get set code value id for sold unimprinted
+                var unimprinted = imprintMethodsLookup.FirstOrDefault(i => i.CodeValue == "Unimprinted");
+
+                if (unimprinted != null)
+                {
+                    soldUnimprintedScvId = unimprinted.ID.Value;
+                }
+
+                var criteriaCode = Constants.CriteriaCodes.ImprintMethod;
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                CriteriaSetValue unimprintedCsvalue = null;
+
+                if (criteriaSet != null)
+                {
+                    unimprintedCsvalue = GetCsValueBySetCodeValueId(soldUnimprintedScvId, criteriaSet);
+                }
+
+                if (soldUnimprinted == "Y")
+                {                    
+                    //create new value for unimprinted if it doesn't exists
+                    if (unimprintedCsvalue == null)
+                    {                                                                        
+                        createNewValue(criteriaCode, "Unimprinted", soldUnimprintedScvId);                        
+                    }
+                    _currentProduct.IsAvailableUnimprinted = true;
+                }
+                else
+                {                    
+                    if (criteriaSet != null && unimprintedCsvalue != null)
+                    {
+                        criteriaSet.CriteriaSetValues.Remove(unimprintedCsvalue);
+                    }
+                    _currentProduct.IsAvailableUnimprinted = false;
+                }
+            }
         }
 
         private static void processImprintArtwork(string text)
@@ -1439,14 +1625,98 @@ namespace ImportPOC2
             //throw new NotImplementedException();
         }
 
-        private static void processAdditionaLocations(string text)
-        {
-            //throw new NotImplementedException();
+        private static void processAdditionalLocations(string text)
+        {            
+            //comma delimited list of additional locations
+            if (_firstRowForProduct)
+            {
+                string criteriaCode = Constants.CriteriaCodes.AdditionaLocation;
+                var additionalLocations = extractCsvList(text);
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                long customAddlLocScvId = 0;
+
+                //get id for custom additional location
+                var addlLoc = imprintCriteriaLookup.FirstOrDefault(i => i.Code == Constants.CriteriaCodes.AdditionaLocation);
+
+                if (addlLoc != null)
+                {
+                    var group = addlLoc.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    if (group != null)
+                    {
+                        customAddlLocScvId = group.SetCodeValues.FirstOrDefault().ID;
+                    }
+                }                
+
+                if (criteriaSet == null)
+                {
+                    criteriaSet = AddCriteriaSet(criteriaCode);
+                }
+                else
+                {
+                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                }
+
+                additionalLocations.ForEach(l =>
+                {
+                    //check if the value already exists
+                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == l.ToLower());
+                    if (!exists)
+                    {                        
+                        //add new value if it doesn't exists                        
+                        createNewValue(criteriaCode, l, customAddlLocScvId, "CUST");                        
+                    }                    
+                });
+
+                DeleteCsValuesMissingFromTheModel(existingCsvalues, additionalLocations, criteriaSet);
+            }
         }
 
-        private static void processAdditionalColors(string text)
+        private static void processAdditionalColors(string text) 
         {
-            //throw new NotImplementedException();
+            //comma delimited list of additional colors
+            if (_firstRowForProduct)
+            {
+                string criteriaCode = Constants.CriteriaCodes.AdditionalColor;
+                var additionalColors = extractCsvList(text);
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                long customAddColScvId = 0;
+
+                //get id for custom additional color
+                var addlCol = imprintCriteriaLookup.FirstOrDefault(i => i.Code == Constants.CriteriaCodes.AdditionalColor);
+
+                if (addlCol != null)
+                {
+                    var group = addlCol.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    if (group != null)
+                    {
+                        customAddColScvId = group.SetCodeValues.FirstOrDefault().ID;
+                    }
+                }
+
+                if (criteriaSet == null)
+                {
+                    criteriaSet = AddCriteriaSet(criteriaCode);
+                }
+                else
+                {
+                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                }
+
+                additionalColors.ForEach(l =>
+                {
+                    //check if the value already exists
+                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == l.ToLower());
+                    if (!exists)
+                    {
+                        //add new value if it doesn't exists                        
+                        createNewValue(criteriaCode, l, customAddColScvId, "CUST");
+                    }
+                });
+
+                DeleteCsValuesMissingFromTheModel(existingCsvalues, additionalColors, criteriaSet);
+            }
         }
 
         private static void processSafetyWarnings(string text)
@@ -1460,8 +1730,43 @@ namespace ImportPOC2
         }
 
         private static void processLineNames(string text)
-        {
-            //throw new NotImplementedException();
+        {            
+            //comma delimited list of line names
+            if (_firstRowForProduct)
+            {                
+                var linenames = extractCsvList(text);
+                var existingLinenames = _currentProduct.SelectedLineNames;
+
+                linenames.ForEach(linename =>
+                {
+                    var linenameFound = linenamesLookup.FirstOrDefault(l => l.Name == linename);
+                    if (linenameFound != null)
+                    {
+                        //check if the line name is already associated with the product
+                        var exists = existingLinenames.Any(v => v.ID == linenameFound.ID);
+                        if (!exists)
+                        {
+                            //associate line name with the product
+                            _currentProduct.SelectedLineNames.Add(linenameFound);
+                        }
+                    }
+                    else
+                    {
+                        //log batch error
+                        AddValidationError("LNNM", linename);
+                        _hasErrors = true;
+                    }
+                });
+
+                //delete line names that are missing from the list in the file
+                var lineneamesToDelete = existingLinenames.Select(e => e.Name).Except(linenames).Select(s => s).ToList();
+
+                lineneamesToDelete.ForEach(l =>
+                {
+                    var toDelete = _currentProduct.SelectedLineNames.FirstOrDefault(v => v.Name == l);
+                    _currentProduct.SelectedLineNames.Remove(toDelete);                    
+                });
+            }
         }
 
         private static void processInventoryStatus(string text)
@@ -1727,6 +2032,37 @@ namespace ImportPOC2
             _currentProduct.ProductConfigurations.FirstOrDefault(cfg => cfg.IsDefault).ProductCriteriaSets.Add(newCs);
 
             return newCs;
+        }
+
+        private static CriteriaSetValue GetCsValueBySetCodeValueId(long scvId, ProductCriteriaSet criteriaSet)
+        {           
+            CriteriaSetValue retVal = null;
+
+            if (criteriaSet != null)
+            {                               
+                foreach (var v in criteriaSet.CriteriaSetValues)
+                {
+                    var scv = v.CriteriaSetCodeValues.Where(s => s.SetCodeValueId == scvId).FirstOrDefault();
+                    if (scv != null)
+                    {
+                        retVal = v;
+                        break;
+                    }
+                }
+            }
+
+            return retVal; 
+        }
+
+        private static void DeleteCsValuesMissingFromTheModel(ICollection<CriteriaSetValue> entities, ICollection<string> models, ProductCriteriaSet criteriaSet)
+        {
+            //delete values that are missing from the list in the file
+            var valuesToDelete = entities.Select(e => e.Value).Except(models).Select(s => s).ToList();
+            valuesToDelete.ForEach(e =>
+            {
+                var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == e);
+                criteriaSet.CriteriaSetValues.Remove(toDelete);
+            });
         }
 
         private static List<string> extractCsvList(string text)
