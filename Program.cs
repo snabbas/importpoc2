@@ -4,12 +4,11 @@ using ImportPOC2.Models;
 using ImportPOC2.Processors;
 using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
-using Radar.Core.Models.Pricing;
 using Radar.Data;
 using Radar.Models;
+using Radar.Models.Company;
 using Radar.Models.Criteria;
 using Radar.Models.Product;
-using Constants = Radar.Core.Common.Constants;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -19,10 +18,9 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
+using Constants = Radar.Core.Common.Constants;
 using ProductKeyword = Radar.Models.Product.ProductKeyword;
 using ProductMediaItem = Radar.Models.Product.ProductMediaItem;
-using Radar.Models.Pricing;
-using Radar.Models.Company;
 [assembly: log4net.Config.XmlConfigurator(Watch = true)]
 
 namespace ImportPOC2
@@ -39,10 +37,11 @@ namespace ImportPOC2
         private static readonly HttpClient RadarHttpClient = new HttpClient {BaseAddress = new Uri("http://local-espupdates.asicentral.com/api/api/")};
         private static Product _currentProduct;
         private static bool _firstRowForProduct = true;
-        private static int globalUniqueId = 0;
-        private static bool publishCurrentProduct = true;
+        private static int _globalUniqueId = 0;
+        private static bool _publishCurrentProduct = true;
+
         private static List<Category> _catlist = null;
-        private static List<Category> CategoryList
+        private static List<Category> categoryList
         {
             get
             {
@@ -113,13 +112,10 @@ namespace ImportPOC2
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        List<ThemeLookUp> themeGroups = JsonConvert.DeserializeObject<List<ThemeLookUp>>(content);
+                        var themeGroups = JsonConvert.DeserializeObject<List<ThemeLookUp>>(content);
                         _themesLookup = new List<SetCodeValue>();
 
-                        themeGroups.ForEach(t =>
-                        {
-                            _themesLookup.AddRange(t.SetCodeValues);
-                        });
+                        themeGroups.ForEach(t => _themesLookup.AddRange(t.SetCodeValues));
                     }
                 }
                 return _themesLookup;
@@ -263,7 +259,7 @@ namespace ImportPOC2
         private static List<CriteriaAttribute> _criteriaAttributeLookup = null;
         private static CriteriaAttribute criteriaAttributeLookup(string code, string name)
         {
-            CriteriaAttribute criteriaAttribute = new CriteriaAttribute();
+            var criteriaAttribute = new CriteriaAttribute();
             if (_criteriaAttributeLookup == null)
             {
                 var results = RadarHttpClient.GetAsync("lookup/criteria_attributes").Result;
@@ -276,7 +272,8 @@ namespace ImportPOC2
 
             if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name))
             {
-                criteriaAttribute = _criteriaAttributeLookup.Where(u => u.CriteriaCode == code && u.Description == name).FirstOrDefault();                 
+                if (_criteriaAttributeLookup != null)
+                    criteriaAttribute = _criteriaAttributeLookup.FirstOrDefault(u => u.CriteriaCode == code && u.Description == name);
             }
 
             return criteriaAttribute;           
@@ -474,7 +471,7 @@ namespace ImportPOC2
                         {
                             processDataRow(row);
                             _firstRowForProduct = false;
-                            publishCurrentProduct = true;
+                            _publishCurrentProduct = true;
                         }
                     }
 
@@ -649,7 +646,7 @@ namespace ImportPOC2
         {
             processProductName(_curProdRow.Product_Name);
             processProductNumber(_curProdRow.Product_Number);
-            processProductSKU(_curProdRow.Product_SKU);
+            processProductSku(_curProdRow.Product_SKU);
             processInventoryLink(_curProdRow.Product_Inventory_Link);
             processInventoryStatus(_curProdRow.Product_Inventory_Status);
             processInventoryQty(_curProdRow.Product_Inventory_Quantity);
@@ -661,6 +658,7 @@ namespace ImportPOC2
             processAdditionalShippingInfo(_curProdRow.Shipping_Info);
             processAdditionalProductInfo(_curProdRow.Additional_Info);
             processDistributorOnlyViewFlag(_curProdRow.Distributor_View_Only);
+            processDistributorOnlyComment(_curProdRow.Distibutor_Only);
             processProductDisclaimer(_curProdRow.Disclaimer);
             processCurrency(_curProdRow.Currency);
             processLessThanMinimum(_curProdRow.Less_Than_Min);
@@ -1139,7 +1137,7 @@ namespace ImportPOC2
         /// </summary>
         /// <param name="column"></param>
         /// <returns>column index as integer</returns>
-        private static int getColIndex(Cell column)
+        private static int getColIndex(CellType column)
         {
             var retVal = 0;
 
@@ -1210,19 +1208,19 @@ namespace ImportPOC2
             //comma delimited list of shapes
             if (_firstRowForProduct)
             {
-                string criteriaCode = Constants.CriteriaCodes.Shape;
-                var shapes = extractCsvList(text);
+                var criteriaCode = Constants.CriteriaCodes.Shape;
+                var shapes = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                var existingCsvalues = new List<CriteriaSetValue>();
 
                 if (criteriaSet == null)
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }           
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
                 shapes.ForEach(s =>
                 {
@@ -1253,19 +1251,19 @@ namespace ImportPOC2
             //comma delimited list of themes
             if (_firstRowForProduct)
             {
-                string criteriaCode = Constants.CriteriaCodes.Theme;
-                var themes = extractCsvList(text);
+                var criteriaCode = Constants.CriteriaCodes.Theme;
+                var themes = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();                             
+                var existingCsvalues = new List<CriteriaSetValue>();                             
 
                 if (criteriaSet == null)
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
                 themes.ForEach(theme =>
                 {                    
@@ -1297,19 +1295,19 @@ namespace ImportPOC2
             //comma delimited list of trade names
             if (_firstRowForProduct)
             {
-                string criteriaCode = Constants.CriteriaCodes.TradeName;
-                var tradenames = extractCsvList(text);
+                var criteriaCode = Constants.CriteriaCodes.TradeName;
+                var tradenames = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                var existingCsvalues = new List<CriteriaSetValue>();
 
                 if (criteriaSet == null)
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
                 tradenames.ForEach(tradename =>
                 {
@@ -1376,16 +1374,13 @@ namespace ImportPOC2
 
                     if (currencyFound != null)
                     {
-                        foreach (var priceGrid in _currentProduct.PriceGrids)
+                        foreach (var priceGrid in _currentProduct.PriceGrids.Where(priceGrid => priceGrid.Currency.Code != currencyFound.Code))
                         {
-                            if (priceGrid.Currency.Code != currencyFound.Code)
+                            priceGrid.Currency = new Radar.Models.Pricing.Currency
                             {
-                                priceGrid.Currency = new Radar.Models.Pricing.Currency
-                                {
-                                    Code = currencyFound.Code,
-                                    Number = currencyFound.Number
-                                };
-                            }
+                                Code = currencyFound.Code,
+                                Number = currencyFound.Number
+                            };
                         }
                     }
                     else
@@ -1403,19 +1398,19 @@ namespace ImportPOC2
             //comma delimited list of origins
             if (_firstRowForProduct)
             {
-                string criteriaCode = "ORGN";
-                var origins = extractCsvList(text);
+                var criteriaCode = "ORGN";
+                var origins = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                var existingCsvalues = new List<CriteriaSetValue>();
 
                 if (criteriaSet == null)
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
                 origins.ForEach(org =>
                 {
@@ -1426,7 +1421,8 @@ namespace ImportPOC2
                         //add new value if it doesn't exists
                         if (!exists)
                         {
-                            createNewValue(criteriaCode, org, originFound.ID.Value);
+                            if (originFound.ID != null)
+                                createNewValue(criteriaCode, org, originFound.ID.Value);
                         }
                     }
                     else
@@ -1445,35 +1441,35 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                string criteriaCode = "SHES";
-                var shippingItems = text.Split(':');              
+                var criteriaCode = "SHES";
+                var shippingItems = text.Split(':');
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                var existingCsvalues = new List<CriteriaSetValue>();
 
                 if (criteriaSet == null)
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
                 if (shippingItems.Length == 2)
                 {
                     var items = shippingItems[0];
                     var unit = shippingItems[1];
-                    var criteriaAttribute = criteriaAttributeLookup("SHES", "Unit");
-                    var unitFound = criteriaAttribute.UnitsOfMeasure.Where(u => u.DisplayName == unit).FirstOrDefault();
+                    var criteriaAttribute = criteriaAttributeLookup(criteriaCode, "Unit");
+                    var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.DisplayName == unit);
                     if (unitFound != null)
                     {
                         var exists = existingCsvalues.Select(v => v.Value).SingleOrDefault();
                         //add new value if it doesn't exists
                         if (exists != null)
                         {
-                            if ( exists.UnitValue != items)
+                            //if (exists.UnitValue != items)
                                 exists.UnitValue = items;
-                            if (exists.UnitOfMeasureCode != unit)
+                            //if (exists.UnitOfMeasureCode != unit)
                                 exists.UnitOfMeasureCode = unit;
                         }
                         else
@@ -1484,15 +1480,17 @@ namespace ImportPOC2
                                 UnitValue = items,
                                 UnitOfMeasureCode = unit
                             };
-                            
+
                             var group = criteriaAttribute.CriteriaItem.CodeValueGroups.FirstOrDefault();
-                            var SetCodeValueId = 0L;
+                            var setCodeValueId = 0L;
                             if (group != null)
                             {
-                                SetCodeValueId = group.SetCodeValues.FirstOrDefault().ID;
+                                var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                                if (setCodeValue != null)
+                                    setCodeValueId = setCodeValue.ID;
                             }
 
-                            createNewValue(criteriaCode, value, SetCodeValueId, "CUST");
+                            createNewValue(criteriaCode, value, setCodeValueId, "CUST");
                         }
                     }
                     else
@@ -1510,10 +1508,10 @@ namespace ImportPOC2
             //comma delimited list of packaging options
             if (_firstRowForProduct)
             {
-                string criteriaCode = Constants.CriteriaCodes.Packaging;
-                var packagingOptions = extractCsvList(text);
+                var criteriaCode = Constants.CriteriaCodes.Packaging;
+                var packagingOptions = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                var existingCsvalues = new List<CriteriaSetValue>();
                 long customPackagingScvId = 0;
 
                 //get id for custom packaging
@@ -1527,14 +1525,14 @@ namespace ImportPOC2
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
                 packagingOptions.ForEach(pkg =>
                 {
-                    var packagingOptionFound = packagingLookup.FirstOrDefault(l => l.Value.ToLower() == pkg.ToLower());
+                    var packagingOptionFound = packagingLookup.FirstOrDefault(l => String.Equals(l.Value, pkg, StringComparison.CurrentCultureIgnoreCase));
                     if (packagingOptionFound != null)
                     {
                         var exists = existingCsvalues.Any(v => v.Value.ToLower() == pkg.ToLower());
@@ -1613,10 +1611,10 @@ namespace ImportPOC2
             //comma delimited list of imprint colors
             if (_firstRowForProduct)
             {
-                string criteriaCode = Constants.CriteriaCodes.ImprintColor;
-                var imprintColors = extractCsvList(text);
+                var criteriaCode = Constants.CriteriaCodes.ImprintColor;
+                var imprintColors = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                var existingCsvalues = new List<CriteriaSetValue>();
                 long imprintColorScvId = 0;
 
                 //get set code value id for imprint color
@@ -1628,7 +1626,9 @@ namespace ImportPOC2
 
                     if (group != null)
                     {
-                        imprintColorScvId = group.SetCodeValues.FirstOrDefault().ID;
+                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                        if (setCodeValue != null)
+                            imprintColorScvId = setCodeValue.ID;
                     }
                 }     
 
@@ -1636,19 +1636,19 @@ namespace ImportPOC2
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
-                imprintColors.ForEach(l =>
+                imprintColors.ForEach(color =>
                 {
                     //check if the value already exists
-                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == l.ToLower());
+                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == color.ToLower());
                     if (!exists)
                     {
                         //add new value if it doesn't exists                        
-                        createNewValue(criteriaCode, l, imprintColorScvId, "CUST");
+                        createNewValue(criteriaCode, color, imprintColorScvId, "CUST");
                     }
                 });
 
@@ -1676,7 +1676,8 @@ namespace ImportPOC2
 
                 if (unimprinted != null)
                 {
-                    soldUnimprintedScvId = unimprinted.ID.Value;
+                    if (unimprinted.ID != null)
+                        soldUnimprintedScvId = unimprinted.ID.Value;
                 }
 
                 var criteriaCode = Constants.CriteriaCodes.ImprintMethod;
@@ -1718,10 +1719,10 @@ namespace ImportPOC2
             //comma delimited list of additional locations
             if (_firstRowForProduct)
             {
-                string criteriaCode = Constants.CriteriaCodes.AdditionaLocation;
-                var additionalLocations = extractCsvList(text);
+                var criteriaCode = Constants.CriteriaCodes.AdditionaLocation;
+                var additionalLocations = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                var existingCsvalues = new List<CriteriaSetValue>();
                 long customAddlLocScvId = 0;
 
                 //get id for custom additional location
@@ -1732,7 +1733,9 @@ namespace ImportPOC2
                     var group = addlLoc.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
                     if (group != null)
                     {
-                        customAddlLocScvId = group.SetCodeValues.FirstOrDefault().ID;
+                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                        if (setCodeValue != null)
+                            customAddlLocScvId = setCodeValue.ID;
                     }
                 }                
 
@@ -1740,19 +1743,19 @@ namespace ImportPOC2
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
-                additionalLocations.ForEach(l =>
+                additionalLocations.ForEach(location =>
                 {
                     //check if the value already exists
-                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == l.ToLower());
+                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == location.ToLower());
                     if (!exists)
                     {                        
                         //add new value if it doesn't exists                        
-                        createNewValue(criteriaCode, l, customAddlLocScvId, "CUST");                        
+                        createNewValue(criteriaCode, location, customAddlLocScvId, "CUST");                        
                     }                    
                 });
 
@@ -1765,10 +1768,10 @@ namespace ImportPOC2
             //comma delimited list of additional colors
             if (_firstRowForProduct)
             {
-                string criteriaCode = Constants.CriteriaCodes.AdditionalColor;
-                var additionalColors = extractCsvList(text);
+                var criteriaCode = Constants.CriteriaCodes.AdditionalColor;
+                var additionalColors = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
+                var existingCsvalues = new List<CriteriaSetValue>();
                 long customAddColScvId = 0;
 
                 //get id for custom additional color
@@ -1779,7 +1782,9 @@ namespace ImportPOC2
                     var group = addlCol.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
                     if (group != null)
                     {
-                        customAddColScvId = group.SetCodeValues.FirstOrDefault().ID;
+                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                        if (setCodeValue != null)
+                            customAddColScvId = setCodeValue.ID;
                     }
                 }
 
@@ -1787,10 +1792,10 @@ namespace ImportPOC2
                 {
                     criteriaSet = AddCriteriaSet(criteriaCode);
                 }
-                else
-                {
-                    existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                }
+                //else
+                //{
+                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                //}
 
                 additionalColors.ForEach(l =>
                 {
@@ -1811,7 +1816,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                var safetyWarnings = extractCsvList(text);
+                var safetyWarnings = text.ConvertToList();
 
                 if (_currentProduct.SelectedSafetyWarnings == null)
                     _currentProduct.SelectedSafetyWarnings = new Collection<SafetyWarning>();
@@ -1846,7 +1851,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                var complianceCertifications = extractCsvList(text);
+                var complianceCertifications = text.ConvertToList();
 
                 if (_currentProduct.SelectedComplianceCerts == null)
                     _currentProduct.SelectedComplianceCerts = new Collection<ProductComplianceCert>();
@@ -1854,13 +1859,13 @@ namespace ImportPOC2
                 complianceCertifications.ForEach(curCert =>
                 {
                     //need to lookup complianceCertifications
-                    var ComplianceCert = complianceLookup.FirstOrDefault(c => c.Value == curCert);
-                    if (ComplianceCert != null)
+                    var complianceCert = complianceLookup.FirstOrDefault(c => c.Value == curCert);
+                    if (complianceCert != null)
                     {
-                        var existing = _currentProduct.SelectedComplianceCerts.FirstOrDefault(c => c.Description == ComplianceCert.Value);
+                        var existing = _currentProduct.SelectedComplianceCerts.FirstOrDefault(c => c.Description == complianceCert.Value);
                         if (existing == null)
                         {
-                            var newComplianceCert = new ProductComplianceCert { ComplianceCertId = Convert.ToInt32(ComplianceCert.Key), Description = ComplianceCert.Value };
+                            var newComplianceCert = new ProductComplianceCert { ComplianceCertId = Convert.ToInt32(complianceCert.Key), Description = complianceCert.Value };
                             _currentProduct.SelectedComplianceCerts.Add(newComplianceCert);
                         }
                         else
@@ -1881,8 +1886,8 @@ namespace ImportPOC2
         {            
             //comma delimited list of line names
             if (_firstRowForProduct)
-            {                
-                var linenames = extractCsvList(text);
+            {
+                var linenames = text.ConvertToList();
                 var existingLinenames = _currentProduct.SelectedLineNames;
 
                 linenames.ForEach(linename =>
@@ -1934,7 +1939,7 @@ namespace ImportPOC2
             }
         }
 
-        private static void processProductSKU(string text)
+        private static void processProductSku(string text)
         {
             if (_firstRowForProduct)
                 _currentProduct.ProductLevelSku = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelSku);
@@ -2050,7 +2055,7 @@ namespace ImportPOC2
             //colors are comma delimited 
             if (_firstRowForProduct)
             {
-                var colorList = extractCsvList(text);
+                var colorList = text.ConvertToList();
                 colorList.ForEach(c =>
                 {
                     //each color is in format of colorName=alias
@@ -2106,12 +2111,7 @@ namespace ImportPOC2
 
         private static void createNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "")
         {
-            var cSet = getCriteriaSetByCode(criteriaCode, optionName);
-
-            if (cSet == null)
-            {
-                cSet = AddCriteriaSet(criteriaCode, optionName);  
-            }
+            var cSet = getCriteriaSetByCode(criteriaCode, optionName) ?? AddCriteriaSet(criteriaCode, optionName);
 
             //create new criteria set value
             var newCsv = new CriteriaSetValue
@@ -2119,7 +2119,7 @@ namespace ImportPOC2
                 CriteriaCode = criteriaCode,
                 CriteriaSetId = cSet.CriteriaSetId,
                 Value = value,
-                ID = --globalUniqueId,
+                ID = --_globalUniqueId,
                 ValueTypeCode = valueTypeCode,
                 CriteriaValueDetail = valueDetail
             };
@@ -2129,7 +2129,7 @@ namespace ImportPOC2
             {
                 CriteriaSetValueId = newCsv.ID,
                 SetCodeValueId = setCodeValueId,
-                ID = --globalUniqueId
+                ID = --_globalUniqueId
             };
 
             newCsv.CriteriaSetCodeValues.Add(newCscv);
@@ -2138,31 +2138,21 @@ namespace ImportPOC2
 
         private static IEnumerable<CriteriaSetValue> getCriteriaSetValuesByCode(string criteriaCode, string optionName = "")
         {
-            var result = new List<CriteriaSetValue>();
-
             var cSet = getCriteriaSetByCode(criteriaCode, optionName);
-            result = cSet.CriteriaSetValues.ToList();
+            var result = cSet.CriteriaSetValues.ToList();
 
             return result;
         }
 
         private static ProductCriteriaSet getCriteriaSetByCode(string criteriaCode, string optionName = "")
         {
-            var cSets = new List<ProductCriteriaSet>();
-            ProductCriteriaSet retVal = new ProductCriteriaSet();
+            var retVal = new ProductCriteriaSet();
             var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
 
             if (prodConfig != null)
             {
-                cSets = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
-                if (!string.IsNullOrWhiteSpace(optionName))
-                {
-                    retVal = cSets.Where(c => c.CriteriaDetail == optionName).FirstOrDefault();
-                }
-                else
-                {
-                    retVal = cSets.FirstOrDefault();
-                }
+                var cSets = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
+                retVal = !string.IsNullOrWhiteSpace(optionName) ? cSets.FirstOrDefault(c => c.CriteriaDetail == optionName) : cSets.FirstOrDefault();
             }
 
             return retVal;
@@ -2182,7 +2172,9 @@ namespace ImportPOC2
                 newCs.CriteriaDetail = optionName;
             }
 
-            _currentProduct.ProductConfigurations.FirstOrDefault(cfg => cfg.IsDefault).ProductCriteriaSets.Add(newCs);
+            var productConfiguration = _currentProduct.ProductConfigurations.FirstOrDefault(cfg => cfg.IsDefault);
+            if (productConfiguration != null)
+                productConfiguration.ProductCriteriaSets.Add(newCs);
 
             return newCs;
         }
@@ -2195,7 +2187,7 @@ namespace ImportPOC2
             {                               
                 foreach (var v in criteriaSet.CriteriaSetValues)
                 {
-                    var scv = v.CriteriaSetCodeValues.Where(s => s.SetCodeValueId == scvId).FirstOrDefault();
+                    var scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId);
                     if (scv != null)
                     {
                         retVal = v;
@@ -2207,7 +2199,7 @@ namespace ImportPOC2
             return retVal; 
         }
 
-        private static void DeleteCsValuesMissingFromTheModel(ICollection<CriteriaSetValue> entities, ICollection<string> models, ProductCriteriaSet criteriaSet)
+        private static void DeleteCsValuesMissingFromTheModel(IEnumerable<CriteriaSetValue> entities, IEnumerable<string> models, ProductCriteriaSet criteriaSet)
         {
             //delete values that are missing from the list in the file
             var valuesToDelete = entities.Select(e => e.Value).Except(models).Select(s => s).ToList();
@@ -2218,19 +2210,19 @@ namespace ImportPOC2
             });
         }
 
-        private static List<string> extractCsvList(string text)
-        {
-            //returns list of strings from input string, split on commas, each value is trimmed, and only non-empty values are returned.
-            //return text.Split(',').Select(str => str.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
-            return text.ConvertToList();
-        }
+        //private static List<string> extractCsvList(string text)
+        //{
+        //    //returns list of strings from input string, split on commas, each value is trimmed, and only non-empty values are returned.
+        //    //return text.Split(',').Select(str => str.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+        //    return text.ConvertToList();
+        //}
 
         private static void processKeywords(string text)
         {
             //comma delimited list of keywords - only "visible" keywords, never ad or seo keywords
             if (_firstRowForProduct)
             {
-                var keywords = extractCsvList(text);
+                var keywords = text.ConvertToList();
                 if (_currentProduct.ProductKeywords == null)
                 {
                     _currentProduct.ProductKeywords = new Collection<ProductKeyword>();
@@ -2241,7 +2233,7 @@ namespace ImportPOC2
                     if (keyObj == null)
                     {
                         //need to add it
-                        var newKeyword = new ProductKeyword {Value = keyword, TypeCode = "HIDD", ID = globalUniqueId--};
+                        var newKeyword = new ProductKeyword {Value = keyword, TypeCode = "HIDD", ID = _globalUniqueId--};
                         _currentProduct.ProductKeywords.Add(newKeyword);
                     }
                 });
@@ -2255,8 +2247,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                //var categories = text.ConvertToList();//TODO: do not split on spaces.
-                var categories = extractCsvList(text);
+                var categories = text.ConvertToList();
 
                 //just in case it's totally empty/null
                 if (_currentProduct.SelectedProductCategories == null)
@@ -2265,7 +2256,7 @@ namespace ImportPOC2
                 categories.ForEach(curCat =>
                 {
                     //need to lookup categories
-                    var category = CategoryList.FirstOrDefault(c => c.Name == curCat);
+                    var category = categoryList.FirstOrDefault(c => c.Name == curCat);
                     if (category != null)
                     {
 
@@ -2283,7 +2274,7 @@ namespace ImportPOC2
                 });
 
                 //remove any categories from product that aren't on the sheet; get list of codes from the sheet 
-                var sheetCategoryList = categories.Join(CategoryList, cat => cat, lookup => lookup.Name, (cat, lookup) => lookup.Code);
+                var sheetCategoryList = categories.Join(categoryList, cat => cat, lookup => lookup.Name, (cat, lookup) => lookup.Code);
                 var toRemove = _currentProduct.SelectedProductCategories.Where(c => !sheetCategoryList.Contains(c.Code)).ToList();
                 toRemove.ForEach(r => _currentProduct.SelectedProductCategories.Remove(r));
             }
@@ -2294,8 +2285,7 @@ namespace ImportPOC2
             if (_firstRowForProduct)
             {
                 //text here should be a list of comma sepearated URLs, in order of display
-                //var urls = text.ConvertToList();//TODO: do not split on spaces
-                var urls = extractCsvList(text);
+                var urls = text.ConvertToList();
 
                 var curUrlCount = 1;
                 urls.ForEach(currentUrl =>
@@ -2325,7 +2315,7 @@ namespace ImportPOC2
             if (_firstRowForProduct)
             {
                 if (!string.IsNullOrWhiteSpace(text) && text.ToLower() == "y")
-                    publishCurrentProduct = false;
+                    _publishCurrentProduct = false;
             }
         }
 
@@ -2366,6 +2356,10 @@ namespace ImportPOC2
             if (_currentProduct != null && !_hasErrors)
             {
                 var x = _currentProduct;
+                if (!_publishCurrentProduct)
+                {
+                    //add "no pub" attribute to radar POST
+                }
             }
         }
 
@@ -2438,14 +2432,11 @@ namespace ImportPOC2
         /// <returns>list of lookup values with matching code or NULL</returns>
         public static List<GenericLookUp> ValidateLookupValues(List<string> lstInputLookups, List<GenericLookUp> lookupList)
         {
-            var lstUserLookupList = new List<GenericLookUp>();
             //var lstInputLookups = strInputLookups.ConvertToList();
-            foreach (var lookupValue in lstInputLookups)
-            {
-                var existingLookup = lookupList.Find(l => l.CodeValue == lookupValue);
-                lstUserLookupList.Add(existingLookup ?? new GenericLookUp { CodeValue = lookupValue, ID = null });
-            }
-            return lstUserLookupList;
+            return (from lookupValue in lstInputLookups 
+                    let existingLookup = lookupList.Find(l => l.CodeValue == lookupValue) 
+                    select existingLookup ?? new GenericLookUp {CodeValue = lookupValue, ID = null})
+                    .ToList();
         }
 
         private static bool compareColumns(IEnumerable<string> columnMetaData)
@@ -2468,7 +2459,7 @@ namespace ImportPOC2
             return row.Elements<Cell>().Select(getCellText).ToList();
         }
 
-        private static List<string> getColumnsByFormatVersion(string p1, string p2)
+        private static IEnumerable<string> getColumnsByFormatVersion(string p1, string p2)
         {
             // we need list of column names, in order by sequence
             //price import v1 is ASIS 0.0.1
