@@ -1,4 +1,4 @@
-﻿using System.Configuration;
+﻿using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
@@ -7,12 +7,12 @@ using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
 using Radar.Data;
 using Radar.Models;
-using Radar.Models.Company;
 using Radar.Models.Criteria;
 using Radar.Models.Product;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Configuration;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -22,6 +22,7 @@ using System.Text.RegularExpressions;
 using Constants = Radar.Core.Common.Constants;
 using ProductKeyword = Radar.Models.Product.ProductKeyword;
 using ProductMediaItem = Radar.Models.Product.ProductMediaItem;
+
 [assembly: log4net.Config.XmlConfigurator(Watch = true)]
 
 namespace ImportPOC2
@@ -66,7 +67,7 @@ namespace ImportPOC2
             //get directory from config
             //TODO: change this to read from config
             //var curDir = Directory.GetCurrentDirectory();
-            var curDir = ConfigurationManager.AppSettings["excelFileLocation"] ?? string.Empty;
+            var curDir = ConfigurationManager.AppSettings["excelFileLocation"] ?? Directory.GetCurrentDirectory();
 
             _log.InfoFormat("running in {0}", curDir);
 
@@ -280,6 +281,8 @@ namespace ImportPOC2
         private static void processColorsMaterials()
         {
             //TODO: VNI-5
+            processProductColors(_curProdRow.Product_Color);
+            processMaterials(_curProdRow.Material);
         }
 
         private static void processSimpleLookups()
@@ -877,91 +880,159 @@ namespace ImportPOC2
             return retVal;
         }
 
+        //changed to use generic processing method
         private static void processShapes(string text)
         {            
-            //comma delimited list of shapes
+            genericProcess(text, Constants.CriteriaCodes.Shape, Lookups.ShapesLookup);
+        }
+
+        private static void genericProcess(string text, string criteriaCode, IEnumerable<GenericLookUp> lookup)
+        {
             if (_firstRowForProduct)
             {
-                var criteriaCode = Constants.CriteriaCodes.Shape;
-                var shapes = text.ConvertToList();
+                var valueList = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();
 
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }           
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
-                shapes.ForEach(s =>
+                valueList.ForEach(value =>
                 {
-                    var shapeFound = Lookups.ShapesLookup.FirstOrDefault(l => l.Value == s);
-                    if (shapeFound != null)
+                    var existing = lookup.FirstOrDefault(l => l.CodeValue.ToLower() == value.ToLower());
+                    if (existing != null)
                     {
-                        var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == s.ToLower());
+                        var exists = existingCsvalues.Any(csv => csv.BaseLookupValue.ToLower() == value.ToLower());
                         //add new value if it doesn't exists
                         if (!exists)
                         {
-                            createNewValue(criteriaCode, s, shapeFound.Key);
+                            if (existing.ID != null)
+                                createNewValue(criteriaCode, value, existing.ID.Value);
                         }
                     }
                     else
                     {
                         //log batch error
-                        AddValidationError(criteriaCode, s);
+                        addValidationError(criteriaCode, value);
                         _hasErrors = true;
                     }
                 });
 
-                DeleteCsValuesMissingFromTheModel(existingCsvalues, shapes, criteriaSet);
+                deleteCsValues(existingCsvalues, valueList, criteriaSet);
+            }
+        }
+
+        //TODO: I want this to be a single method that uses the same lookup type as method below
+        private static void genericProcess(string text, string criteriaCode, IEnumerable<SetCodeValue> lookup)
+        {
+            //comma delimited list of type
+            if (_firstRowForProduct)
+            {
+                var valueList = text.ConvertToList();
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                
+                valueList.ForEach(item =>
+                {
+                    var exists = lookup.FirstOrDefault(l => String.Equals(l.CodeValue, item, StringComparison.CurrentCultureIgnoreCase));
+
+                    if (exists != null)
+                    {
+                        var existing = existingCsvalues.Any(csv => csv.BaseLookupValue.ToLower() == item.ToLower());
+                        //add new value if it doesn't exists
+                        if (!existing)
+                        {
+                            createNewValue(criteriaCode, item, exists.ID);
+                        }
+                    }
+                    else
+                    {
+                        //log batch error
+                        addValidationError(criteriaCode, item);
+                        _hasErrors = true;
+                    }
+                });
+
+                deleteCsValues(existingCsvalues, valueList, criteriaSet);
+            }
+        }
+        //TODO: see above, this should be same method as above. 
+        private static void genericProcess(string text, string criteriaCode, IEnumerable<KeyValueLookUp> lookup)
+        {
+            //comma delimited list of type
+            if (_firstRowForProduct)
+            {
+                var valueList = text.ConvertToList();
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+
+                valueList.ForEach(item =>
+                {
+                    var exists = lookup.FirstOrDefault(l => String.Equals(l.Value, item, StringComparison.CurrentCultureIgnoreCase));
+
+                    if (exists != null)
+                    {
+                        var existing = existingCsvalues.Any(csv => csv.BaseLookupValue.ToLower() == item.ToLower());
+                        //add new value if it doesn't exists
+                        if (!existing)
+                        {
+                            createNewValue(criteriaCode, item, exists.Key);
+                        }
+                    }
+                    else
+                    {
+                        //log batch error
+                        addValidationError(criteriaCode, item);
+                        _hasErrors = true;
+                    }
+                });
+
+                deleteCsValues(existingCsvalues, valueList, criteriaSet);
+            }
+        }
+
+        private static void genericProcessImprintCriteria(string text, string criteriaCode)
+        {
+            if (_firstRowForProduct)
+            {
+                var valueList = text.ConvertToList();
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                long customSetCodeValueId = 0;
+
+                //get id for custom additional location
+                var criteriaLookUp = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => i.Code == criteriaCode);
+
+                if (criteriaLookUp != null)
+                {
+                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    if (group != null)
+                    {
+                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                        if (setCodeValue != null)
+                            customSetCodeValueId = setCodeValue.ID;
+                    }
+                }
+
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+
+                valueList.ForEach(value =>
+                {
+                    //check if the value already exists
+                    var exists = existingCsvalues.Any(csv => csv.Value.ToLower() == value.ToLower());
+                    if (!exists)
+                    {
+                        //add new value if it doesn't exist
+                        createNewValue(criteriaCode, value, customSetCodeValueId, "CUST");
+                    }
+                });
+
+                deleteCsValues(existingCsvalues, valueList, criteriaSet);
             }
         }
 
         private static void processThemes(string text)
         {
-            //comma delimited list of themes
-            if (_firstRowForProduct)
-            {
-                var criteriaCode = Constants.CriteriaCodes.Theme;
-                var themes = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();                             
-
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
-
-                themes.ForEach(theme =>
-                {
-                    var themeFound = Lookups.ThemesLookup.FirstOrDefault(t => t.CodeValue.ToLower() == theme.ToLower());
-
-                    if (themeFound != null)
-                    {
-                        var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == theme.ToLower());
-                        //add new value if it doesn't exists
-                        if (!exists)
-                        {
-                            createNewValue(criteriaCode, theme, themeFound.ID);
-                        }
-                    }
-                    else
-                    {
-                        //log batch error
-                        AddValidationError(criteriaCode, theme);
-                        _hasErrors = true;
-                    }
-                });
-
-                DeleteCsValuesMissingFromTheModel(existingCsvalues, themes, criteriaSet);
-            }
+            genericProcess(text, Constants.CriteriaCodes.Theme, Lookups.ThemesLookup);
         }
 
         private static void processTradenames(string text)
@@ -972,16 +1043,8 @@ namespace ImportPOC2
                 var criteriaCode = Constants.CriteriaCodes.TradeName;
                 var tradenames = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();
 
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
                 tradenames.ForEach(tradename =>
                 {
@@ -1000,12 +1063,12 @@ namespace ImportPOC2
                     else
                     {
                         //log batch error
-                        AddValidationError(criteriaCode, tradename);
+                        addValidationError(criteriaCode, tradename);
                         _hasErrors = true;
                     }
                 });
 
-                DeleteCsValuesMissingFromTheModel(existingCsvalues, tradenames, criteriaSet);
+                deleteCsValues(existingCsvalues, tradenames, criteriaSet);
             }
         }
 
@@ -1027,7 +1090,7 @@ namespace ImportPOC2
                 else 
                 {
                     //log batch error 
-                    AddValidationError("priceType", text);
+                    addValidationError("priceType", text);
                     _hasErrors = true;
                 }
             }
@@ -1060,7 +1123,7 @@ namespace ImportPOC2
                     else
                     {
                         //log batch error 
-                        AddValidationError("Currency", text);
+                        addValidationError("Currency", text);
                         _hasErrors = true;
                     }
                 }                
@@ -1069,46 +1132,7 @@ namespace ImportPOC2
 
         private static void processOrigins(string text)
         {
-            //comma delimited list of origins
-            if (_firstRowForProduct)
-            {
-                var criteriaCode = "ORGN";
-                var origins = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();
-
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
-
-                origins.ForEach(org =>
-                {
-                    var originFound = Lookups.OriginsLookup.FirstOrDefault(l => l.CodeValue.ToLower() == org.ToLower());
-                    if (originFound != null)
-                    {
-                        var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == org.ToLower());
-                        //add new value if it doesn't exists
-                        if (!exists)
-                        {
-                            if (originFound.ID != null)
-                                createNewValue(criteriaCode, org, originFound.ID.Value);
-                        }
-                    }
-                    else
-                    {
-                        //log batch error
-                        AddValidationError(criteriaCode, org);
-                        _hasErrors = true;
-                    }
-                });
-
-                DeleteCsValuesMissingFromTheModel(existingCsvalues, origins, criteriaSet);
-            }
+            genericProcess(text, "ORGN", Lookups.OriginsLookup);
         }
 
         private static void processShippingItems(string text)
@@ -1118,16 +1142,8 @@ namespace ImportPOC2
                 var criteriaCode = "SHES";
                 var shippingItems = text.Split(':');
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();
 
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
                 if (shippingItems.Length == 2)
                 {
@@ -1170,7 +1186,7 @@ namespace ImportPOC2
                     else
                     {
                         //log batch error
-                        AddValidationError(criteriaCode, unit);
+                        addValidationError(criteriaCode, unit);
                         _hasErrors = true;
                     }
                 }
@@ -1185,7 +1201,7 @@ namespace ImportPOC2
                 var criteriaCode = Constants.CriteriaCodes.Packaging;
                 var packagingOptions = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();
+                
                 long customPackagingScvId = 0;
 
                 //get id for custom packaging
@@ -1195,14 +1211,8 @@ namespace ImportPOC2
                     customPackagingScvId = customPackaging.Key;
                 }
 
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                
 
                 packagingOptions.ForEach(pkg =>
                 {
@@ -1223,7 +1233,7 @@ namespace ImportPOC2
                     }
                 });
 
-                DeleteCsValuesMissingFromTheModel(existingCsvalues, packagingOptions, criteriaSet);
+                deleteCsValues(existingCsvalues, packagingOptions, criteriaSet);
             }
         }
 
@@ -1266,7 +1276,7 @@ namespace ImportPOC2
             //        existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
             //    }                
 
-            //    DeleteCsValuesMissingFromTheModel(existingCsvalues, imprintSizes, criteriaSet);
+            //    deleteCsValues(existingCsvalues, imprintSizes, criteriaSet);
             //}
         }
 
@@ -1288,7 +1298,7 @@ namespace ImportPOC2
                 var criteriaCode = Constants.CriteriaCodes.ImprintColor;
                 var imprintColors = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();
+                
                 long imprintColorScvId = 0;
 
                 //get set code value id for imprint color
@@ -1306,15 +1316,8 @@ namespace ImportPOC2
                     }
                 }     
 
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
-
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                
                 imprintColors.ForEach(color =>
                 {
                     //check if the value already exists
@@ -1326,7 +1329,7 @@ namespace ImportPOC2
                     }
                 });
 
-                DeleteCsValuesMissingFromTheModel(existingCsvalues, imprintColors, criteriaSet);
+                deleteCsValues(existingCsvalues, imprintColors, criteriaSet);
             }
         }
 
@@ -1339,7 +1342,7 @@ namespace ImportPOC2
                 var validValues = new [] {"Y", "N"};
                 if (!string.IsNullOrWhiteSpace(soldUnimprinted) && !validValues.Contains(soldUnimprinted))
                 {
-                    AddValidationError("GNER", "invalid value for Sold Unimprinted");
+                    addValidationError("GNER", "invalid value for Sold Unimprinted");
                     return;
                 }
 
@@ -1360,7 +1363,7 @@ namespace ImportPOC2
 
                 if (criteriaSet != null)
                 {
-                    unimprintedCsvalue = GetCsValueBySetCodeValueId(soldUnimprintedScvId, criteriaSet);
+                    unimprintedCsvalue = getCsValueBySetCodeValueId(soldUnimprintedScvId, criteriaSet);
                 }
 
                 if (soldUnimprinted == "Y")
@@ -1388,102 +1391,17 @@ namespace ImportPOC2
             //throw new NotImplementedException();
         }
 
+
         private static void processAdditionalLocations(string text)
         {            
             //comma delimited list of additional locations
-            if (_firstRowForProduct)
-            {
-                var criteriaCode = Constants.CriteriaCodes.AdditionaLocation;
-                var additionalLocations = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();
-                long customAddlLocScvId = 0;
-
-                //get id for custom additional location
-                var addlLoc = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => i.Code == Constants.CriteriaCodes.AdditionaLocation);
-
-                if (addlLoc != null)
-                {
-                    var group = addlLoc.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
-                    if (group != null)
-                    {
-                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
-                        if (setCodeValue != null)
-                            customAddlLocScvId = setCodeValue.ID;
-                    }
-                }                
-
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
-
-                additionalLocations.ForEach(location =>
-                {
-                    //check if the value already exists
-                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == location.ToLower());
-                    if (!exists)
-                    {                        
-                        //add new value if it doesn't exists                        
-                        createNewValue(criteriaCode, location, customAddlLocScvId, "CUST");                        
-                    }                    
-                });
-
-                DeleteCsValuesMissingFromTheModel(existingCsvalues, additionalLocations, criteriaSet);
-            }
+            genericProcessImprintCriteria(text, Constants.CriteriaCodes.AdditionaLocation);
         }
 
         private static void processAdditionalColors(string text) 
         {
             //comma delimited list of additional colors
-            if (_firstRowForProduct)
-            {
-                var criteriaCode = Constants.CriteriaCodes.AdditionalColor;
-                var additionalColors = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = new List<CriteriaSetValue>();
-                long customAddColScvId = 0;
-
-                //get id for custom additional color
-                var addlCol = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => i.Code == Constants.CriteriaCodes.AdditionalColor);
-
-                if (addlCol != null)
-                {
-                    var group = addlCol.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
-                    if (group != null)
-                    {
-                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
-                        if (setCodeValue != null)
-                            customAddColScvId = setCodeValue.ID;
-                    }
-                }
-
-                if (criteriaSet == null)
-                {
-                    criteriaSet = AddCriteriaSet(criteriaCode);
-                }
-                //else
-                //{
-                existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                //}
-
-                additionalColors.ForEach(l =>
-                {
-                    //check if the value already exists
-                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == l.ToLower());
-                    if (!exists)
-                    {
-                        //add new value if it doesn't exists                        
-                        createNewValue(criteriaCode, l, customAddColScvId, "CUST");
-                    }
-                });
-
-                DeleteCsValuesMissingFromTheModel(existingCsvalues, additionalColors, criteriaSet);
-            }
+            genericProcessImprintCriteria(text, Constants.CriteriaCodes.AdditionalColor);
         }
 
         private static void processSafetyWarnings(string text)
@@ -1566,7 +1484,7 @@ namespace ImportPOC2
 
                 linenames.ForEach(linename =>
                 {
-                    var linenameFound = linenamesLookup.FirstOrDefault(l => l.Name == linename);
+                    var linenameFound = Lookups.LinenamesLookup.FirstOrDefault(l => l.Name == linename);
                     if (linenameFound != null)
                     {
                         //check if the line name is already associated with the product
@@ -1580,7 +1498,7 @@ namespace ImportPOC2
                     else
                     {
                         //log batch error
-                        AddValidationError("LNNM", linename);
+                        addValidationError("LNNM", linename);
                         _hasErrors = true;
                     }
                 });
@@ -1607,7 +1525,7 @@ namespace ImportPOC2
                 }
                 else
                 {
-                    AddValidationError("InventoryStatus", text);
+                    addValidationError("InventoryStatus", text);
                     _hasErrors = true;
                 }
             }
@@ -1785,7 +1703,7 @@ namespace ImportPOC2
 
         private static void createNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "")
         {
-            var cSet = getCriteriaSetByCode(criteriaCode, optionName) ?? AddCriteriaSet(criteriaCode, optionName);
+            var cSet = getCriteriaSetByCode(criteriaCode, optionName) ;
 
             //create new criteria set value
             var newCsv = new CriteriaSetValue
@@ -1820,7 +1738,7 @@ namespace ImportPOC2
 
         private static ProductCriteriaSet getCriteriaSetByCode(string criteriaCode, string optionName = "")
         {
-            var retVal = new ProductCriteriaSet();
+            ProductCriteriaSet retVal = null;
             var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
 
             if (prodConfig != null)
@@ -1829,10 +1747,12 @@ namespace ImportPOC2
                 retVal = !string.IsNullOrWhiteSpace(optionName) ? cSets.FirstOrDefault(c => c.CriteriaDetail == optionName) : cSets.FirstOrDefault();
             }
 
+            retVal = retVal ?? addCriteriaSet(criteriaCode, optionName);
+
             return retVal;
         }
 
-        private static ProductCriteriaSet AddCriteriaSet(string criteriaCode, string optionName = "")
+        private static ProductCriteriaSet addCriteriaSet(string criteriaCode, string optionName = "")
         {
             var newCs = new ProductCriteriaSet
             {
@@ -1853,7 +1773,7 @@ namespace ImportPOC2
             return newCs;
         }
 
-        private static CriteriaSetValue GetCsValueBySetCodeValueId(long scvId, ProductCriteriaSet criteriaSet)
+        private static CriteriaSetValue getCsValueBySetCodeValueId(long scvId, ProductCriteriaSet criteriaSet)
         {           
             CriteriaSetValue retVal = null;
 
@@ -1873,7 +1793,7 @@ namespace ImportPOC2
             return retVal; 
         }
 
-        private static void DeleteCsValuesMissingFromTheModel(IEnumerable<CriteriaSetValue> entities, IEnumerable<string> models, ProductCriteriaSet criteriaSet)
+        private static void deleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<string> models, ProductCriteriaSet criteriaSet)
         {
             //delete values that are missing from the list in the file
             var valuesToDelete = entities.Select(e => e.Value).Except(models).Select(s => s).ToList();
@@ -2101,15 +2021,15 @@ namespace ImportPOC2
         /// <summary>
         /// using input string, compare against provided lookup list and return list of values that match with appropriate code, otherwise null if no match. 
         /// </summary>
-        /// <param name="lstInputLookups">list of strings to lookup and validate against LookupList</param>
+        /// <param name="inputValueList">list of strings to lookup and validate against LookupList</param>
         /// <param name="lookupList">List of known values to match against</param>
         /// <returns>list of lookup values with matching code or NULL</returns>
-        public static List<GenericLookUp> ValidateLookupValues(List<string> lstInputLookups, List<GenericLookUp> lookupList)
+        private static List<GenericLookUp> validateLookupValues(IEnumerable<string> inputValueList, List<GenericLookUp> lookupList)
         {
-            //var lstInputLookups = strInputLookups.ConvertToList();
-            return (from lookupValue in lstInputLookups 
-                    let existingLookup = lookupList.Find(l => l.CodeValue == lookupValue) 
-                    select existingLookup ?? new GenericLookUp {CodeValue = lookupValue, ID = null})
+            //var inputValueList = strInputLookups.ConvertToList();
+            return (from value in inputValueList 
+                    let existingLookup = lookupList.Find(l => l.CodeValue == value) 
+                    select existingLookup ?? new GenericLookUp {CodeValue = value, ID = null})
                     .ToList();
         }
 
@@ -2128,7 +2048,7 @@ namespace ImportPOC2
             return test.All(a => a.Value == 1);
         }
 
-        private static List<string> getColumnsFromSheet(Row row)
+        private static List<string> getColumnsFromSheet(OpenXmlElement row)
         {
             return row.Elements<Cell>().Select(getCellText).ToList();
         }
@@ -2194,8 +2114,11 @@ namespace ImportPOC2
             return text;
         }
 
-        private static void AddValidationError(string criteriaCode, string info)
+        private static void addValidationError(string criteriaCode, string info)
         {
+            //TODO: criteria code will not always correctly map to field codes
+            //TODO: where did "ILUV" error code come from? 
+
             _curBatch.BatchErrorLogs.Add(new BatchErrorLog
             {
                 FieldCode = criteriaCode,

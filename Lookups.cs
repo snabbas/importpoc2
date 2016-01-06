@@ -331,7 +331,7 @@ namespace ImportPOC2
         }
 
         private static List<LineName> _linenamesLookup = null;
-        private static List<LineName> linenamesLookup
+        public static List<LineName> LinenamesLookup
         {
             get
             {
@@ -346,7 +346,7 @@ namespace ImportPOC2
                 }
                 return _linenamesLookup;
             }
-            set { linenamesLookup = value; }
+            set { _linenamesLookup = value; }
         }
 
 
