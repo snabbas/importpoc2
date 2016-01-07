@@ -243,7 +243,8 @@ namespace ImportPOC2
 
         private static void processCurrentProdRow()
         {
-            processProductLevelFields();
+            ProductLevelFieldsProcessor productLevelFieldsProcessor = new ProductLevelFieldsProcessor(_curProdRow, _firstRowForProduct, _currentProduct, _publishCurrentProduct, _curBatch);
+            productLevelFieldsProcessor.ProcessProductLevelFields();                       
             processSimpleLookups();
             processColorsMaterials();
             processSizes();
@@ -314,38 +315,9 @@ namespace ImportPOC2
             //shipping weight
             //shipping bills by
             //ship plain box
-            processComplianceCertifications(_curProdRow.Comp_Cert);
-            processProductDataSheet(_curProdRow.Product_Data_Sheet);
+            processComplianceCertifications(_curProdRow.Comp_Cert);           
             processSafetyWarnings(_curProdRow.Safety_Warnings);
-        }
-
-        private static void processProductLevelFields()
-        {
-            processProductName(_curProdRow.Product_Name);
-            processProductNumber(_curProdRow.Product_Number);
-            processProductSku(_curProdRow.Product_SKU);
-            processInventoryLink(_curProdRow.Product_Inventory_Link);
-            processInventoryStatus(_curProdRow.Product_Inventory_Status);
-            processInventoryQty(_curProdRow.Product_Inventory_Quantity);
-            processDescription(_curProdRow.Description);
-            processSummary(_curProdRow.Summary);
-            processImage(_curProdRow.Prod_Image);
-            processCategory(_curProdRow.Category);
-            processKeywords(_curProdRow.Keywords);
-            processAdditionalShippingInfo(_curProdRow.Shipping_Info);
-            processAdditionalProductInfo(_curProdRow.Additional_Info);
-            processDistributorOnlyViewFlag(_curProdRow.Distributor_View_Only);
-            processDistributorOnlyComment(_curProdRow.Distibutor_Only);
-            processProductDisclaimer(_curProdRow.Disclaimer);
-            processCurrency(_curProdRow.Currency);
-            processLessThanMinimum(_curProdRow.Less_Than_Min);
-            processPriceType(_curProdRow.Price_Type);
-            //breakout price - not processed
-            processConfirmationDate(_curProdRow.Confirmed_Thru_Date);
-            processDontMakeActive(_curProdRow.Dont_Make_Active);
-            //breakout by attribute -- not processed
-            //seo flag -- not processed
-        }
+        }        
 
         //TODO: gotta be a better way to do this. 
         private static void populateProdObject(int colIndex, string text)
@@ -808,7 +780,6 @@ namespace ImportPOC2
             }
         }
 
-
         /// <summary>
         /// converts an excel column reference value (e.g., "A", "AZ", "Q") into column index.
         /// </summary>
@@ -1112,65 +1083,7 @@ namespace ImportPOC2
 
                 deleteCsValues(existingCsvalues, tradenames, criteriaSet);
             }
-        }
-
-        private static void processPriceType(string text)
-        {
-            if (_firstRowForProduct)
-            {
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    text = "List";
-                }
-
-                var priceTypeFound = Lookups.CostTypesLookup.FirstOrDefault(t => t.Code == text);
-
-                if (priceTypeFound != null)
-                {
-                    _currentProduct.CostTypeCode = BasicFieldProcessor.UpdateField(text, _currentProduct.CostTypeCode);
-                }
-                else 
-                {
-                    //log batch error 
-                    addValidationError("priceType", text);
-                    _hasErrors = true;
-                }
-            }
-        }        
-
-        private static void processCurrency(string text)
-        {
-            if (_firstRowForProduct)
-            {
-                if (_currentProduct.PriceGrids.Count > 0)
-                {
-                    if (string.IsNullOrWhiteSpace(text))
-                    {
-                        text = "USD";
-                    }
-
-                    var currencyFound = Lookups.CurrencyLookup.FirstOrDefault(t => t.Code == text);
-
-                    if (currencyFound != null)
-                    {
-                        foreach (var priceGrid in _currentProduct.PriceGrids.Where(priceGrid => priceGrid.Currency.Code != currencyFound.Code))
-                        {
-                            priceGrid.Currency = new Radar.Models.Pricing.Currency
-                            {
-                                Code = currencyFound.Code,
-                                Number = currencyFound.Number
-                            };
-                        }
-                    }
-                    else
-                    {
-                        //log batch error 
-                        addValidationError("Currency", text);
-                        _hasErrors = true;
-                    }
-                }                
-            }
-        }
+        }                
 
         private static void processOrigins(string text)
         {
@@ -1277,15 +1190,7 @@ namespace ImportPOC2
 
                 deleteCsValues(existingCsvalues, packagingOptions, criteriaSet);
             }
-        }
-
-        private static void processLessThanMinimum(string text)
-        {
-            if (_firstRowForProduct)
-            {
-                _currentProduct.IsOrderLessThanMinimumAllowed = BasicFieldProcessor.UpdateField(text, _currentProduct.IsOrderLessThanMinimumAllowed);
-            }
-        }
+        }       
 
         private static void processImprintSizes(string text)
         {
@@ -1574,90 +1479,12 @@ namespace ImportPOC2
                     _currentProduct.SelectedLineNames.Remove(toDelete);                    
                 });
             }
-        }
-
-        private static void processInventoryStatus(string text)
-        {
-            if (_firstRowForProduct)
-            {
-                var inventoryStatusFound = Lookups.InventoryStatusesLookup.FirstOrDefault(t => t.Value == text);
-                if (inventoryStatusFound != null)
-                {
-                    _currentProduct.ProductLevelInventoryStatusCode = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryStatusCode);
-                }
-                else
-                {
-                    addValidationError("InventoryStatus", text);
-                    _hasErrors = true;
-                }
-            }
-        }
-
-        private static void processProductSku(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.ProductLevelSku = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelSku);
-        }
-
-        private static void processInventoryQty(string text)
-        {
-            if (_firstRowForProduct)
-            {
-                _currentProduct.ProductLevelInventoryQuantity = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryQuantity);
-            }
-        }
+        }        
 
         private static void processCatalogInfo(string text)
         {
             //throw new NotImplementedException();
-        }
-
-        private static void processProductDataSheet(string text)
-        {
-            if (_firstRowForProduct)
-
-                if (_currentProduct.ProductDataSheet == null)
-                    _currentProduct.ProductDataSheet = new ProductDataSheet();
-
-                _currentProduct.ProductDataSheet.Url = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductDataSheet.Url);
-        }
-
-        private static void processDistributorOnlyViewFlag(string text)
-        {
-            //throw new NotImplementedException();
-        }
-
-        private static void processDistributorOnlyComment(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.DistributorComments = BasicFieldProcessor.UpdateField(text, _currentProduct.DistributorComments);
-        }
-
-        private static void processProductDisclaimer(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.Disclaimer = BasicFieldProcessor.UpdateField(text, _currentProduct.Disclaimer);
-        }
-
-        private static void processConfirmationDate(string text)
-        {
-            if (_firstRowForProduct)
-            {              
-                _currentProduct.PriceConfirmationDate = BasicFieldProcessor.UpdateField(text, _currentProduct.PriceConfirmationDate);
-            }
-        }
-
-        private static void processAdditionalProductInfo(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.AdditionalInfo = BasicFieldProcessor.UpdateField(text, _currentProduct.AdditionalInfo);
-        }
-
-        private static void processAdditionalShippingInfo(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.AddtionalShippingInfo = BasicFieldProcessor.UpdateField(text, _currentProduct.AddtionalShippingInfo);
-        }
+        }                                
 
         private static void processMaterials(string text)
         {
@@ -1871,139 +1698,7 @@ namespace ImportPOC2
         //    //returns list of strings from input string, split on commas, each value is trimmed, and only non-empty values are returned.
         //    //return text.Split(',').Select(str => str.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
         //    return text.ConvertToList();
-        //}
-
-        private static void processKeywords(string text)
-        {
-            //comma delimited list of keywords - only "visible" keywords, never ad or seo keywords
-            if (_firstRowForProduct)
-            {
-                var keywords = text.ConvertToList();
-                if (_currentProduct.ProductKeywords == null)
-                {
-                    _currentProduct.ProductKeywords = new Collection<ProductKeyword>();
-                }
-                keywords.ForEach(keyword =>
-                {
-                    var keyObj = _currentProduct.ProductKeywords.FirstOrDefault(p => p.Value == keyword);
-                    if (keyObj == null)
-                    {
-                        //need to add it
-                        var newKeyword = new ProductKeyword {Value = keyword, TypeCode = "HIDD", ID = _globalUniqueId--};
-                        _currentProduct.ProductKeywords.Add(newKeyword);
-                    }
-                });
-                //now select any product keywords that are not in the sheet's list, and remove them
-                var toRemove = _currentProduct.ProductKeywords.Where(p => !keywords.Contains(p.Value)).ToList();
-                toRemove.ForEach(r => _currentProduct.ProductKeywords.Remove(r));
-            }
-        }
-
-        private static void processCategory(string text)
-        {
-            if (_firstRowForProduct)
-            {
-                var categories = text.ConvertToList();
-
-                //just in case it's totally empty/null
-                if (_currentProduct.SelectedProductCategories == null)
-                    _currentProduct.SelectedProductCategories = new Collection<ProductCategory>();
-
-                categories.ForEach(curCat =>
-                {
-                    //need to lookup categories
-                    var category = Lookups.CategoryList.FirstOrDefault(c => c.Name == curCat);
-                    if (category != null)
-                    {
-
-                        var existing = _currentProduct.SelectedProductCategories.FirstOrDefault(c => c.Code == category.Code);
-                        if (existing == null)
-                        {
-                            var newCat = new ProductCategory {Code = category.Code, AdCategoryFlg = false};
-                            _currentProduct.SelectedProductCategories.Add(newCat);
-                        }
-                        else
-                        {
-                            //s/b nothing to do? 
-                        }
-                    }
-                });
-
-                //remove any categories from product that aren't on the sheet; get list of codes from the sheet 
-                var sheetCategoryList = categories.Join(Lookups.CategoryList, cat => cat, lookup => lookup.Name, (cat, lookup) => lookup.Code);
-                var toRemove = _currentProduct.SelectedProductCategories.Where(c => !sheetCategoryList.Contains(c.Code)).ToList();
-                toRemove.ForEach(r => _currentProduct.SelectedProductCategories.Remove(r));
-            }
-        }
-
-        private static void processImage(string text)
-        {
-            if (_firstRowForProduct)
-            {
-                //text here should be a list of comma sepearated URLs, in order of display
-                var urls = text.ConvertToList();
-
-                var curUrlCount = 1;
-                urls.ForEach(currentUrl =>
-                {
-                    if (!string.IsNullOrWhiteSpace(currentUrl))
-                    {
-                        //note: no validation here, Radar already does all of that.
-                        var curMedia = _currentProduct.ProductMediaItems.FirstOrDefault(m => m.Media.Url == currentUrl);
-                        if (curMedia == null)
-                        {
-                            //add it
-                            var m = new Media {Url = currentUrl};
-                            var pm = new ProductMediaItem {Media = m, MediaRank = curUrlCount++};
-                            _currentProduct.ProductMediaItems.Add(pm);
-                        }
-                        else
-                        {
-                            curMedia.MediaRank = curUrlCount++;
-                        }
-                    }
-                });
-            }
-        }
-
-        private static void processDontMakeActive(string text)
-        {
-            if (_firstRowForProduct)
-            {
-                if (!string.IsNullOrWhiteSpace(text) && text.ToLower() == "y")
-                    _publishCurrentProduct = false;
-            }
-        }
-
-        private static void processInventoryLink(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.ProductLevelInventoryLink = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductLevelInventoryLink);
-        }
-
-        private static void processSummary(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.Summary = BasicFieldProcessor.UpdateField(text, _currentProduct.Summary);
-        }
-
-        private static void processDescription(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.Description = BasicFieldProcessor.UpdateField(text, _currentProduct.Description);
-        }
-
-        private static void processProductNumber(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.AsiProdNo = BasicFieldProcessor.UpdateField(text, _currentProduct.AsiProdNo);
-        }
-
-        private static void processProductName(string text)
-        {
-            if (_firstRowForProduct)
-                _currentProduct.Name = BasicFieldProcessor.UpdateField(text, _currentProduct.Name);
-        }        
+        //}        
 
         private static void finishProduct()
         {
