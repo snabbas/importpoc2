@@ -296,13 +296,13 @@ namespace ImportPOC2
             processLineNames(_curProdRow.Linename);
             processImprintArtwork(_curProdRow.Artwork);
             processImprintColors(_curProdRow.Imprint_Color);
-            processSoldUnimprinted(_curProdRow.Sold_Unimprinted);           
-            //personalization
+            processSoldUnimprinted(_curProdRow.Sold_Unimprinted);
+            processPersonalization(_curProdRow.Personalization);         
             processImprintSizes(_curProdRow.Imprint_Size);
             processImprintLocations(_curProdRow.Imprint_Location);
             processAdditionalColors(_curProdRow.Additional_Color);
             processAdditionalLocations(_curProdRow.Additional_Location);
-            //product sample
+            processProductSample(_curProdRow.Product_Sample);            
             //spec sample
             //production time
             //rush service
@@ -1030,6 +1030,48 @@ namespace ImportPOC2
             }
         }
 
+        //this generic method will handle the processing for imprint methods and personalization
+        private static void genericProcessImprintMethods(string text, string criteriaCode, IEnumerable<CodeValueLookUp> lookup)
+        {
+            //comma separated list of values
+            if (_firstRowForProduct)
+            {
+                //var valueList = text.ConvertToList();
+                List<string> valueList = new List<string>();
+
+                //for the moment hard-coding this because ConvertToList method needs to be fixed to handle values like Debossed=My Debossed
+                valueList.Add("Debossed=My Debossed");
+                valueList.Add("Engraved");
+
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+
+                valueList.ForEach(value =>
+                {
+                    //value can be of the format [Debossed=My Debossed]
+                    var splittedValue = value.SplitValue('=');
+                    var existing = Lookups.ImprintMethodsLookup.FirstOrDefault(l => l.Value.ToLower() == splittedValue.CodeValue.ToLower());
+                    if (existing != null)
+                    {
+                        var exists = existingCsvalues.Any(csv => csv.Value == splittedValue.AdditionalInfo);
+                        //add new value if it doesn't exists
+                        if (!exists)
+                        {
+                            createNewValue(criteriaCode, splittedValue.AdditionalInfo, Convert.ToInt64(existing.Code));                           
+                        }
+                    }
+                    else
+                    {
+                        //log batch error
+                        addValidationError(criteriaCode, value);
+                        _hasErrors = true;
+                    }
+                });
+
+                deleteCsValues(existingCsvalues, valueList, criteriaSet);
+            }
+        }
+
         private static void processThemes(string text)
         {
             genericProcess(text, Constants.CriteriaCodes.Theme, Lookups.ThemesLookup);
@@ -1282,7 +1324,22 @@ namespace ImportPOC2
 
         private static void processImprintMethods(string text)
         {
-            //throw new NotImplementedException();
+            genericProcessImprintMethods(text, Constants.CriteriaCodes.ImprintMethod, Lookups.ImprintMethodsLookup);                       
+        }
+
+        private static void processPersonalization(string text)
+        {
+            genericProcessImprintMethods(text, "PERS", Lookups.PersonalizationLookup);
+            var pers = getCriteriaSetByCode("PERS");
+
+            if (pers != null && pers.CriteriaSetValues.Any())
+            {
+                _currentProduct.IsPersonalizationAvailable = true;
+            }
+            else
+            {
+                _currentProduct.IsPersonalizationAvailable = false;
+            }           
         }
 
         private static void processImprintLocations(string text)
@@ -1349,12 +1406,12 @@ namespace ImportPOC2
                 long soldUnimprintedScvId = 0;
 
                 //get set code value id for sold unimprinted
-                var unimprinted = Lookups.ImprintMethodsLookup.FirstOrDefault(i => i.CodeValue == "Unimprinted");
+                var unimprinted = Lookups.ImprintMethodsLookup.FirstOrDefault(i => i.Value == "Unimprinted");
 
                 if (unimprinted != null)
                 {
-                    if (unimprinted.ID != null)
-                        soldUnimprintedScvId = unimprinted.ID.Value;
+                    if (unimprinted.Code != null)
+                        soldUnimprintedScvId = Convert.ToInt64(unimprinted.Code);
                 }
 
                 var criteriaCode = Constants.CriteriaCodes.ImprintMethod;
@@ -1391,7 +1448,6 @@ namespace ImportPOC2
             //throw new NotImplementedException();
         }
 
-
         private static void processAdditionalLocations(string text)
         {            
             //comma delimited list of additional locations
@@ -1402,6 +1458,12 @@ namespace ImportPOC2
         {
             //comma delimited list of additional colors
             genericProcessImprintCriteria(text, Constants.CriteriaCodes.AdditionalColor);
+        }
+
+        private static void processProductSample(string text)
+        {
+
+
         }
 
         private static void processSafetyWarnings(string text)

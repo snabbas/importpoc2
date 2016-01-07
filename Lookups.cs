@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Radar.Models.Company;
 using Radar.Models.Criteria;
+using Radar.Core.Common;
 
 namespace ImportPOC2
 {
@@ -15,18 +16,24 @@ namespace ImportPOC2
         public static HttpClient RadarHttpClient;
         public static int CurrentCompanyId;
 
-        private static List<GenericLookUp> _imprintMethodsLookup = null;
-        public static List<GenericLookUp> ImprintMethodsLookup
+        private static List<CodeValueLookUp> _imprintMethodsLookup = null;
+        public static List<CodeValueLookUp> ImprintMethodsLookup
         {
             get
             {
                 if (_imprintMethodsLookup == null)
                 {
+                    _imprintMethodsLookup = new List<CodeValueLookUp>();
                     var results = RadarHttpClient.GetAsync("lookup/imprint_methods").Result;
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        _imprintMethodsLookup = JsonConvert.DeserializeObject<List<GenericLookUp>>(content);
+                        var deserializedList = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);
+
+                        if (deserializedList != null)
+                        {
+                            deserializedList.ForEach(l => _imprintMethodsLookup.Add(new CodeValueLookUp { Code = l.ID.ToString(), Value = l.CodeValue }));
+                        }
                     }
                 }
                 return _imprintMethodsLookup;
@@ -88,6 +95,8 @@ namespace ImportPOC2
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
                         _shapesLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+                        ICollection<CodeValueLookUp> lookup = new List<CodeValueLookUp>();
+                        _shapesLookup.ForEach(s => lookup.Add(new CodeValueLookUp { Code = s.Key.ToString(), Value = s.Value }));
                     }
                 }
                 return _shapesLookup;
@@ -349,6 +358,52 @@ namespace ImportPOC2
             set { _linenamesLookup = value; }
         }
 
+        private static List<CodeValueLookUp> _artworkLookup = null;
+        public static List<CodeValueLookUp> ArtworkLookup
+        {
+            get
+            {
+                if (_artworkLookup == null)
+                {
+                    _artworkLookup = new List<CodeValueLookUp>(); 
+                    var artworks = ImprintCriteriaLookup.FirstOrDefault(l => l.Code == Constants.CriteriaCodes.Artwork);
+                    if (artworks != null)
+                    {
+                        var group = artworks.CodeValueGroups.FirstOrDefault();
+                        if (group != null)
+                        {
+                            group.SetCodeValues.ToList().ForEach(s => _artworkLookup.Add(new CodeValueLookUp { Code = s.ID.ToString(), Value = s.CodeValue }));
+                        }
+                    }                   
+                }
+                return _artworkLookup;
+            }
+            set { _artworkLookup = value; }
+        }
 
+        private static List<CodeValueLookUp> _personalizationLookup = null;
+        public static List<CodeValueLookUp> PersonalizationLookup
+        {
+            get
+            {
+                if (_personalizationLookup == null)
+                {
+                    _personalizationLookup = new List<CodeValueLookUp>();
+                    var results = RadarHttpClient.GetAsync("lookup/personalization_methods").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        var deserializedList = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);
+
+                        if (deserializedList != null)
+                        {
+                            deserializedList.ForEach(l => _personalizationLookup.Add(new CodeValueLookUp { Code = l.ID.ToString(), Value = l.CodeValue }));
+                        }
+                    }
+                }
+                return _personalizationLookup;
+            }
+            set { _personalizationLookup = value; }
+        }
     }
 }
