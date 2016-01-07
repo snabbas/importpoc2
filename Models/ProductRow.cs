@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace ImportPOC2.Models
 {
-    internal class ProductRow
+    public class ProductRow
     {
 
         public string Additional_Color { get; set; }

@@ -130,8 +130,10 @@
     <Compile Include="Models\ProductRow.cs" />
     <Compile Include="Processors\BasicFieldProcessor.cs" />
     <Compile Include="Models\ProductColorGroup.cs" />
+    <Compile Include="Processors\ProductLevelFieldsProcessor.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Utils\Validation.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config">

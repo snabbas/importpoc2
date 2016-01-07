@@ -25,5 +25,35 @@ namespace ImportPOC2
             }
             return lstValues;
         }
+
+        public static FieldInfo SplitValue(this string value, char separator)
+        {
+            FieldInfo retVal = new FieldInfo(); 
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                var tokens = value.Split(separator);
+
+                if (tokens.Length == 2)
+                {
+                    retVal.CodeValue = tokens[0];
+                    retVal.AdditionalInfo = tokens[1];
+                }
+                else
+                {
+                    retVal.CodeValue = tokens[0];
+                    retVal.AdditionalInfo = tokens[0];
+                }
+            }
+
+            return retVal;
+        }
+    }
+
+    public class FieldInfo
+    {
+        public string CodeValue { get; set; }
+        public string AdditionalInfo { get; set; }
     }
 }
+
+
