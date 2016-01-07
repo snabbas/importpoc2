@@ -127,9 +127,12 @@
     <Compile Include="Models\Category.cs" />
     <Compile Include="Extensions.cs" />
     <Compile Include="Models\LookUp.cs" />
+    <Compile Include="Models\PriceGridMap.cs" />
     <Compile Include="Models\ProductRow.cs" />
     <Compile Include="Processors\BasicFieldProcessor.cs" />
     <Compile Include="Models\ProductColorGroup.cs" />
+    <Compile Include="Processors\CriteriaProcessor.cs" />
+    <Compile Include="Processors\PriceProcessor.cs" />
     <Compile Include="Processors\ProductLevelFieldsProcessor.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

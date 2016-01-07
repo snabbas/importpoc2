@@ -45,6 +45,7 @@ namespace ImportPOC2
         private static log4net.ILog _log;
         private static bool _hasErrors = false;
         private static ProductRow _curProdRow;
+        private static PriceProcessor _priceProcessor;
 
         static void Main(string[] args)
         {
@@ -243,12 +244,13 @@ namespace ImportPOC2
 
         private static void processCurrentProdRow()
         {
-            ProductLevelFieldsProcessor productLevelFieldsProcessor = new ProductLevelFieldsProcessor(_curProdRow, _firstRowForProduct, _currentProduct, _publishCurrentProduct, _curBatch);
+            var productLevelFieldsProcessor = new ProductLevelFieldsProcessor(_curProdRow, _firstRowForProduct, _currentProduct, _publishCurrentProduct, _curBatch);
             productLevelFieldsProcessor.ProcessProductLevelFields();                       
             processSimpleLookups();
             processColorsMaterials();
             processSizes();
             processOptions();
+            //NOTE: the following must be processed after the above since they depend upon configuration of the product
             processPricing();
             processProductNumbers();
             processSkuInventory();
@@ -267,6 +269,7 @@ namespace ImportPOC2
         private static void processPricing()
         {
             //TODO: VNI-8
+            _priceProcessor.ProcessPriceRow(_curProdRow, _currentProduct);
         }
 
         private static void processOptions()
@@ -809,6 +812,7 @@ namespace ImportPOC2
                 _currentProduct = getProductByXid() ?? new Product { CompanyId = _companyId };
                 _firstRowForProduct = true;
                 _hasErrors = false;
+                _priceProcessor = new PriceProcessor();
             }
         }
 
@@ -1668,14 +1672,13 @@ namespace ImportPOC2
 
             if (criteriaSet != null)
             {                               
-                foreach (var v in criteriaSet.CriteriaSetValues)
+                foreach (var v in 
+                    from v in criteriaSet.CriteriaSetValues 
+                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId) 
+                    where scv != null select v)
                 {
-                    var scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId);
-                    if (scv != null)
-                    {
-                        retVal = v;
-                        break;
-                    }
+                    retVal = v;
+                    break;
                 }
             }
 
@@ -1706,7 +1709,10 @@ namespace ImportPOC2
             // we "send" the product to Radar for processing. 
             if (_currentProduct != null && !_hasErrors)
             {
-                var x = _currentProduct;
+                _priceProcessor.Finalize();
+                //TODO: other repeatable sets will "finalize" here as well. 
+
+                //var x = _currentProduct;
                 if (!_publishCurrentProduct)
                 {
                     //add "no pub" attribute to radar POST

@@ -1,14 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace ImportPOC2.Models
+﻿namespace ImportPOC2.Models
 {
     public class ProductRow
     {
-
         public string Additional_Color { get; set; }
         public string Additional_Info { get; set; }
         public string Additional_Location { get; set; }
