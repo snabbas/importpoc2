@@ -57,6 +57,8 @@ namespace ImportPOC2.Processors
             processDontMakeActive(_currentProductRow.Dont_Make_Active);
             //breakout by attribute -- not processed
             //seo flag -- not processed
+            processShippingBillBy(_currentProductRow.Shipper_Bills_By);
+            processShippingPlainBox(_currentProductRow.Ship_Plain_Box);
         }
        
         private void processProductName(string text)
@@ -334,5 +336,41 @@ namespace ImportPOC2.Processors
 
             _currentProduct.ProductDataSheet.Url = BasicFieldProcessor.UpdateField(text, _currentProduct.ProductDataSheet.Url);
         }
+
+        private void processShippingBillBy(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                if(!string.IsNullOrWhiteSpace(text))
+                {
+                    var code = string.Empty;
+                    bool sizeOfPackage =  text.ToLower().Contains("size");
+                    bool weightOfPackage = text.ToLower().Contains("weight");
+
+                    if (sizeOfPackage && weightOfPackage)
+                    {
+                        code = "WSIZ";
+                    }
+                    else if (!sizeOfPackage && weightOfPackage)
+                    {
+                        code = "WEIG";
+                    }
+                    else if (sizeOfPackage && !weightOfPackage)
+                    {
+                        code = "SIZE";
+                    }
+
+                    _currentProduct.ShipperBillsByCode = BasicFieldProcessor.UpdateField(code, _currentProduct.ShipperBillsByCode);
+                }
+            }
+        }
+
+        private void processShippingPlainBox(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                _currentProduct.IsShippableInPlainBox = BasicFieldProcessor.UpdateField(text, _currentProduct.IsShippableInPlainBox);
+            }
+        }       
     }
 }

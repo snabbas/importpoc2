@@ -309,15 +309,14 @@ namespace ImportPOC2
             processProductSample(_curProdRow.Product_Sample);  
             processSpecSample(_curProdRow.Spec_Sample);           
             //production time
+            processProductionTime(_curProdRow.Production_Time); 
             //rush service
             //rush time
             //same day
             processPackagingOptions(_curProdRow.Packaging);
-            processShippingItems(_curProdRow.Shipping_Items);           
-            //shipping dimensions
-            //shipping weight
-            //shipping bills by
-            //ship plain box
+            processShippingItems(_curProdRow.Shipping_Items);
+            processShippingDimensions(_curProdRow.Shipping_Dimensions);
+            processShippingWeight(_curProdRow.Shipping_Weight);           
             processComplianceCertifications(_curProdRow.Comp_Cert);           
             processSafetyWarnings(_curProdRow.Safety_Warnings);
         }        
@@ -1176,18 +1175,17 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                var criteriaCode = "SHES";
                 var shippingItems = text.Split(':');
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-
                 if (shippingItems.Length == 2)
                 {
+                    var criteriaCode = "SHES";                
+                    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                    var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                     var items = shippingItems[0];
                     var unit = shippingItems[1];
                     var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Unit");
                     var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.DisplayName == unit);
+
                     if (unitFound != null)
                     {
                         var exists = existingCsvalues.Select(v => v.Value).SingleOrDefault();
@@ -1229,6 +1227,87 @@ namespace ImportPOC2
                 }
             }
         }
+        
+        private static void processShippingDimensions(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                var criteriaCode = "SDIM";
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                var dimentionTypes = new string[] {"Length", "Width", "Height"};
+                var shippingDimensions = text.Split(';');
+
+                for (var i = 0; i < shippingDimensions.Length; i++)
+                {
+                    processDimension(criteriaCode, dimentionTypes[i], shippingDimensions[i]);
+                }              
+            }
+        }
+
+        private static void processDimension(string criteriaCode, string dimentionType, string dimensionUnitValue)
+        {
+            if (!string.IsNullOrWhiteSpace(dimensionUnitValue))
+            {
+                var dimensionValues = dimensionUnitValue.Split(':');
+
+                if (dimensionValues.Length == 2)
+                {
+                    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                    var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+
+                    var dimension = dimensionValues[0];
+                    var unit = dimensionValues[1];
+
+                    var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, dimentionType);
+                    var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == unit);
+                    if (unitFound != null)
+                    {
+                        var value = new
+                        {
+                            CriteriaAttributeId = criteriaAttribute.ID,
+                            UnitValue = dimension,
+                            UnitOfMeasureCode = unit
+                        };
+
+                        if (existingCsvalues.Count() == 0)
+                        {
+                            //add new value if it doesn't exist                       
+                            var group = criteriaAttribute.CriteriaItem.CodeValueGroups.FirstOrDefault();
+                            var setCodeValueId = 0L;
+                            if (group != null)
+                            {
+                                var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                                if (setCodeValue != null)
+                                    setCodeValueId = setCodeValue.ID;
+                            }
+                            var valueList = new List<dynamic>();
+                            valueList.Add(value);
+                            createNewValue(criteriaCode, valueList, setCodeValueId, "CUST");
+                        }
+                        else
+                        {
+                            existingCsvalues.FirstOrDefault().Value.Add(value);
+                        }
+                    }
+                    else
+                    {
+                        //log batch error
+                        addValidationError(criteriaCode, unit);
+                        _hasErrors = true;
+                    }
+                }
+            }
+        }
+
+        private static void processShippingWeight(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                var criteriaCode = "SHWT";
+                processDimension(criteriaCode, "Unit", text);               
+            }
+        }      
 
         private static void processPackagingOptions(string text)
         {
@@ -1542,6 +1621,66 @@ namespace ImportPOC2
         {
             genericProcessSamples(text, "SMPL", Lookups.ImprintCriteriaLookup, "Spec Sample");
         }
+
+        private static void processProductionTime(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                var criteriaCode = Constants.CriteriaCodes.ProductionTime;
+                var productionTimes = new List<FieldInfo>();
+                var productionTimesTokens = text.ConvertToList();
+                long customSetCodeValueId = 0;
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();                
+               
+                var criteriaLookUp = Lookups.ProductionTimeCriteriaLookup.FirstOrDefault(i => i.Code == criteriaCode);
+
+                if (criteriaLookUp != null)
+                {
+                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    if (group != null)
+                    {
+                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                        if (setCodeValue != null)
+                            customSetCodeValueId = setCodeValue.ID;
+                    }
+                }
+
+                productionTimesTokens.ForEach(token =>
+                {
+                   productionTimes.Add(token.SplitValue(':'));
+                });
+
+                productionTimes.ForEach(productionTime =>
+                {                   
+                    var time = string.Empty;
+                    var comment = string.Empty;
+
+                    time = productionTime.CodeValue;
+
+                    if (!string.IsNullOrWhiteSpace(productionTime.AdditionalInfo))
+                    {
+                        comment = productionTime.AdditionalInfo;
+                    }
+
+                    var exists = existingCsvalues.FirstOrDefault(v => v.Value != null && v.Value.UnitValue == time && v.CriteriaValueDetail == comment);
+                    //add new value if it doesn't exists
+                    if (exists == null)
+                    {
+                        var value = new 
+                        {
+                              CriteriaAttributeId = 13,
+                              UnitValue = time,
+                              UnitOfMeasureCode = "BUSI"
+                        };
+
+                         createNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment);
+                    }                   
+                });                
+
+                deleteCsValues(existingCsvalues, productionTimes, criteriaSet);               
+            }
+        }      
 
         private static void processSafetyWarnings(string text)
         {
@@ -1880,6 +2019,25 @@ namespace ImportPOC2
             valuesToDelete.ForEach(e =>
             {
                 var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == e);
+                criteriaSet.CriteriaSetValues.Remove(toDelete);
+            });
+        }
+
+        private static void deleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<FieldInfo> models, ProductCriteriaSet criteriaSet)
+        {
+            //delete values that are missing from the list in the file
+            var csValuesToDelete = new List<CriteriaSetValue>();
+            entities.ToList().ForEach(e => {
+                var exists = models.FirstOrDefault(m => m.CodeValue == e.Value.UnitValue && m.AdditionalInfo == e.CriteriaValueDetail);
+                if (exists == null)
+                {
+                    csValuesToDelete.Add(e);
+                }
+            });
+
+            csValuesToDelete.ForEach(e =>
+            {
+                var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v == e);
                 criteriaSet.CriteriaSetValues.Remove(toDelete);
             });
         }
