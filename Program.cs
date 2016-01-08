@@ -1,13 +1,14 @@
 ﻿using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Drawing;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
 using ImportPOC2.Processors;
 using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
+using Radar.Core.Models.Criteria;
 using Radar.Data;
 using Radar.Models;
-using Radar.Models.Criteria;
 using Radar.Models.Product;
 using System;
 using System.Collections.Generic;
@@ -20,6 +21,10 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using Constants = Radar.Core.Common.Constants;
+using CriteriaSetCodeValue = Radar.Models.Criteria.CriteriaSetCodeValue;
+using CriteriaSetValue = Radar.Models.Criteria.CriteriaSetValue;
+using Path = System.IO.Path;
+using SetCodeValue = Radar.Models.Criteria.SetCodeValue;
 
 [assembly: log4net.Config.XmlConfigurator(Watch = true)]
 
@@ -278,6 +283,7 @@ namespace ImportPOC2
         private static void processSizes()
         {
             //TODO: VNI-6
+            //todo: will need to look at both size type and value columns to know what to do.
         }
 
         private static void processColorsMaterials()
@@ -854,9 +860,142 @@ namespace ImportPOC2
 
         //changed to use generic processing method
         private static void processShapes(string text)
-        {                        
-            genericProcess(text, Constants.CriteriaCodes.Shape, Lookups.ShapesLookup);
+        {
+            //TODO: ensure we this the lookup as generic direct from Lookups object instead of converting here. 
+            var shapesAsGeneric = new List<GenericLookUp>();
+            shapesAsGeneric.AddRange(Lookups.ShapesLookup.Select(s => new GenericLookUp {CodeValue = s.Value, ID = s.Key}));
+
+            lookupFieldProcessor(text, Constants.CriteriaCodes.Shape, shapesAsGeneric);
         }
+
+        private static void lookupFieldProcessor(string text, string criteriaCode, List<GenericLookUp> lookup)
+        {
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
+            {
+                //split the values, if it's csv 
+                var sheetValueList = text.ConvertToList();
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var existingCsValues = criteriaSet.CriteriaSetValues.ToList();
+
+                var sheetCodeValuesToValidate = parseByCriteriaCode(criteriaCode, sheetValueList);
+
+                var matchedList = validateLookupValues(sheetCodeValuesToValidate, lookup);
+
+                matchedList.ForEach(sheetValue =>
+                {
+                    if (!sheetValue.ID.HasValue)
+                    {
+                       handleValueExistenceByCode(criteriaCode, sheetValue);
+                    }
+
+                    if (sheetValue.ID.HasValue)
+                    {
+                        // ReSharper disable once PossibleInvalidOperationException
+                        var existing = getCsValueBySetCodeValueId(sheetValue.ID.Value, existingCsValues);
+                        if (existing == null)
+                        {
+                            //create it
+                            createNewValue(criteriaCode, sheetValue.CodeValue, sheetValue.ID.Value);
+                        }
+                        else
+                        {
+                            //update existing value object? 
+                            updateCsValue(criteriaCode, sheetValue.CodeValue, sheetValue.ID.Value);
+                        }
+                    }
+                });
+
+                deleteCsValues(existingCsValues, sheetValueList, criteriaSet);
+            }
+        }
+
+        /// <summary>
+        /// "convert" incoming sheet values into non-encoded values stripped of aliases, special formatting, etc.
+        /// the output is expected to be list that will be checked against a valid code_value list from Look_SetCodeValue
+        /// </summary>
+        /// <param name="criteriaCode"></param>
+        /// <param name="sheetValueList"></param>
+        /// <returns></returns>
+        private static IEnumerable<string> parseByCriteriaCode(string criteriaCode, List<string> sheetValueList)
+        {
+            var retVal = sheetValueList;
+            //NOTE: only make exceptions here, lave out fields that have no special processing, such as Shape, theme, etc.
+            switch (criteriaCode)
+            {
+                case "IMMD":
+                    //format is simply code_value=alias, so strip off after "="
+                    retVal = sheetValueList.Select(s => s.Split('=').First().Trim()).ToList();
+                    break;
+            }
+
+            return retVal;
+        }
+
+        /// <summary>
+        /// this method should either log an error (such as for SHAP) or perform whatever is necessary to 
+        /// handle when the user has provided a value that didn't match our lookups
+        /// for imprint method, we reassign their entry to "Other"
+        /// </summary>
+        /// <param name="criteriaCode"></param>
+        /// <param name="sheetValue"></param>
+        /// <returns></returns>
+        private static bool handleValueExistenceByCode(string criteriaCode, GenericLookUp sheetValue)
+        {
+            var retVal = true;
+            switch (criteriaCode)
+            {
+                case "SHAP":
+                case "THEM":
+                case "TDNM":
+                case "ORGN":
+                    //for these sets if the sheet value can't be matched, it's a field-level validation error. 
+                    addInvalidValueError(sheetValue.CodeValue, criteriaCode);
+                    retVal = false;
+                    break;
+
+                case "IMMD":
+                    //in this case, we use "Other" set code, then add it
+                    var otherImprintMethodSetCodeId = Lookups.ImprintMethodsLookup.FirstOrDefault(i => i.CodeValue == "Other");
+                    if (otherImprintMethodSetCodeId != null)
+                        sheetValue.ID = otherImprintMethodSetCodeId.ID;
+                    break;
+                case "PERS":
+                    //in this case, we use "Other" set code, then add it
+                    //sheetValue.ID == otherPersonalizationSetCodeId;
+                    break;
+                case "PCKG":
+                    // here we use "CUSTOM" set code instead, then add it
+                    break;
+                case "PRCL":
+                    break;
+                case "MTRL":
+                    break;
+            }
+
+            return retVal;
+        }
+
+        //use this method to update an existing CSVs properites, such as comments (criteriaValueDetail field)
+        private static void updateCsValue(string criteriaCode, string criteriaValue, long setCodeValueId, string criteriaDetail = "")
+        {
+            //use criteria code to ensure we do the right type of update
+            switch (criteriaCode)
+            {
+                case "SHAP":
+                case "THEM":
+                case "TDNM":
+                case "ORGN":
+                    //do nothing, you can't update existing values in these sets
+                    break;
+
+            }
+        }
+
+        private static void addInvalidValueError(string invalidValue, string criteriaCode)
+        {
+            //add to batch error log that the specified value does not match a value in lookup
+        }
+
 
         private static void genericProcess(string text, string criteriaCode, IEnumerable<GenericLookUp> lookup)
         {
@@ -1017,44 +1156,44 @@ namespace ImportPOC2
         //this generic method will handle the processing for imprint methods and personalization
         private static void genericProcessImprintMethods(string text, string criteriaCode, IEnumerable<CodeValueLookUp> lookup)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
+            //if (string.IsNullOrWhiteSpace(text))
+            //    return;
 
-            //comma separated list of values
-            if (_firstRowForProduct)
-            {
-                //var valueList = text.ConvertToList();
-                var valueList = new List<string> {"Debossed=My Debossed", "Engraved"};
+            ////comma separated list of values
+            //if (_firstRowForProduct)
+            //{
+            //    var valueList = text.ConvertToList();
+            //    //var valueList = new List<string> {"Debossed=My Debossed", "Engraved", "Four Color = MyMultiColorMethod"};
 
-                //for the moment hard-coding this because ConvertToList method needs to be fixed to handle values like Debossed=My Debossed
+            //    //for the moment hard-coding this because ConvertToList method needs to be fixed to handle values like Debossed=My Debossed
 
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+            //    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+            //    var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
-                valueList.ForEach(value =>
-                {
-                    //value can be of the format [Debossed=My Debossed]
-                    var splittedValue = value.SplitValue('=');
-                    var existing = Lookups.ImprintMethodsLookup.FirstOrDefault(l => l.Value.ToLower() == splittedValue.CodeValue.ToLower());
-                    if (existing != null)
-                    {
-                        var exists = existingCsvalues.Any(csv => csv.Value == splittedValue.AdditionalInfo);
-                        //add new value if it doesn't exists
-                        if (!exists)
-                        {
-                            createNewValue(criteriaCode, splittedValue.AdditionalInfo, Convert.ToInt64(existing.Code));                           
-                        }
-                    }
-                    else
-                    {
-                        //log batch error
-                        addValidationError(criteriaCode, value);
-                        _hasErrors = true;
-                    }
-                });
+            //    valueList.ForEach(value =>
+            //    {
+            //        //value can be of the format [Debossed=My Debossed]
+            //        var splittedValue = value.SplitValue('=');
+            //        var existing = Lookups.ImprintMethodsLookup.FirstOrDefault(l => l.Value.ToLower() == splittedValue.CodeValue.ToLower());
+            //        if (existing != null)
+            //        {
+            //            var exists = existingCsvalues.Any(csv => csv.Value == splittedValue.Alias);
+            //            //add new value if it doesn't exists
+            //            if (!exists)
+            //            {
+            //                createNewValue(criteriaCode, splittedValue.Alias, Convert.ToInt64(existing.Code));                           
+            //            }
+            //        }
+            //        else
+            //        {
+            //            //log batch error
+            //            addValidationError(criteriaCode, value);
+            //            _hasErrors = true;
+            //        }
+            //    });
 
-                deleteCsValues(existingCsvalues, valueList, criteriaSet);
-            }
+            //    deleteCsValues(existingCsvalues, valueList, criteriaSet);
+            //}
         }
 
         //this generic method will handle the processing for product and spec samples
@@ -1084,7 +1223,7 @@ namespace ImportPOC2
                     var csValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == sampleType);
                     if (csValue != null)
                     {
-                        csValue.CriteriaValueDetail = splittedValue.AdditionalInfo;
+                        csValue.CriteriaValueDetail = splittedValue.Alias;
                     }
                     else
                     {
@@ -1117,8 +1256,12 @@ namespace ImportPOC2
         }
 
         private static void processThemes(string text)
-        {           
-            genericProcess(text, Constants.CriteriaCodes.Theme, Lookups.ThemesLookup);
+        {
+            //TODO: ensure we this the lookup as generic direct from Lookups object instead of converting here. 
+            var themesAsGeneric = new List<GenericLookUp>();
+            themesAsGeneric.AddRange(Lookups.ThemesLookup.Select(t => new GenericLookUp {CodeValue = t.CodeValue, ID = t.ID}));
+
+            lookupFieldProcessor(text, Constants.CriteriaCodes.Theme, themesAsGeneric);
         }
 
         private static void processTradenames(string text)
@@ -1163,7 +1306,7 @@ namespace ImportPOC2
 
         private static void processOrigins(string text)
         {
-            genericProcess(text, "ORGN", Lookups.OriginsLookup);
+            lookupFieldProcessor(text, "ORGN", Lookups.OriginsLookup);
         }
 
         private static void processShippingItems(string text)
@@ -1355,7 +1498,9 @@ namespace ImportPOC2
 
         private static void processImprintMethods(string text)
         {
-            genericProcessImprintMethods(text, Constants.CriteriaCodes.ImprintMethod, Lookups.ImprintMethodsLookup);                       
+            //genericProcessImprintMethods(text, Constants.CriteriaCodes.ImprintMethod, Lookups.ImprintMethodsLookup);                       
+
+            lookupFieldProcessor(text, Constants.CriteriaCodes.ImprintMethod, Lookups.ImprintMethodsLookup);
         }
 
         private static void processPersonalization(string text)
@@ -1475,58 +1620,58 @@ namespace ImportPOC2
 
         private static void processSoldUnimprinted(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
+            //if (string.IsNullOrWhiteSpace(text))
+            //    return;
 
-            if (_firstRowForProduct)
-            {
-                //should be Y/N
-                var soldUnimprinted = text;
-                var validValues = new [] {"Y", "N"};
-                if (!string.IsNullOrWhiteSpace(soldUnimprinted) && !validValues.Contains(soldUnimprinted))
-                {
-                    addValidationError("GNER", "invalid value for Sold Unimprinted");
-                    return;
-                }
+            //if (_firstRowForProduct)
+            //{
+            //    //should be Y/N
+            //    var soldUnimprinted = text;
+            //    var validValues = new [] {"Y", "N"};
+            //    if (!string.IsNullOrWhiteSpace(soldUnimprinted) && !validValues.Contains(soldUnimprinted))
+            //    {
+            //        addValidationError("GNER", "invalid value for Sold Unimprinted");
+            //        return;
+            //    }
 
-                long soldUnimprintedScvId = 0;
+            //    long soldUnimprintedScvId = 0;
 
-                //get set code value id for sold unimprinted
-                var unimprinted = Lookups.ImprintMethodsLookup.FirstOrDefault(i => i.Value == "Unimprinted");
+            //    //get set code value id for sold unimprinted
+            //    var unimprinted = Lookups.ImprintMethodsLookup.FirstOrDefault(i => i.Value == "Unimprinted");
 
-                if (unimprinted != null)
-                {
-                    if (unimprinted.Code != null)
-                        soldUnimprintedScvId = Convert.ToInt64(unimprinted.Code);
-                }
+            //    if (unimprinted != null)
+            //    {
+            //        if (unimprinted.Code != null)
+            //            soldUnimprintedScvId = Convert.ToInt64(unimprinted.Code);
+            //    }
 
-                var criteriaCode = Constants.CriteriaCodes.ImprintMethod;
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                CriteriaSetValue unimprintedCsvalue = null;
+            //    var criteriaCode = Constants.CriteriaCodes.ImprintMethod;
+            //    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+            //    CriteriaSetValue unimprintedCsvalue = null;
 
-                if (criteriaSet != null)
-                {
-                    unimprintedCsvalue = getCsValueBySetCodeValueId(soldUnimprintedScvId, criteriaSet);
-                }
+            //    if (criteriaSet != null)
+            //    {
+            //        unimprintedCsvalue = getCsValueBySetCodeValueId(soldUnimprintedScvId, criteriaSet.CriteriaSetValues);
+            //    }
 
-                if (soldUnimprinted == "Y")
-                {                    
-                    //create new value for unimprinted if it doesn't exists
-                    if (unimprintedCsvalue == null)
-                    {                                                                        
-                        createNewValue(criteriaCode, "Unimprinted", soldUnimprintedScvId);                        
-                    }
-                    _currentProduct.IsAvailableUnimprinted = true;
-                }
-                else
-                {                    
-                    if (criteriaSet != null && unimprintedCsvalue != null)
-                    {
-                        criteriaSet.CriteriaSetValues.Remove(unimprintedCsvalue);
-                    }
-                    _currentProduct.IsAvailableUnimprinted = false;
-                }
-            }
+            //    if (soldUnimprinted == "Y")
+            //    {                    
+            //        //create new value for unimprinted if it doesn't exists
+            //        if (unimprintedCsvalue == null)
+            //        {                                                                        
+            //            createNewValue(criteriaCode, "Unimprinted", soldUnimprintedScvId);                        
+            //        }
+            //        _currentProduct.IsAvailableUnimprinted = true;
+            //    }
+            //    else
+            //    {                    
+            //        if (criteriaSet != null && unimprintedCsvalue != null)
+            //        {
+            //            criteriaSet.CriteriaSetValues.Remove(unimprintedCsvalue);
+            //        }
+            //        _currentProduct.IsAvailableUnimprinted = false;
+            //    }
+            //}
         }
 
         private static void processImprintArtwork(string text)
@@ -1563,25 +1708,25 @@ namespace ImportPOC2
                         if (exists.ID != otherArtworkScValueId)
                         {
                             if (exists.ID != null)
-                                existingCsValue = getCsValueBySetCodeValueId(exists.ID.Value, criteriaSet);
+                                existingCsValue = getCsValueBySetCodeValueId(exists.ID.Value, criteriaSet.CriteriaSetValues);
                         }
                         else
                         {
                             if (exists.ID != null)
-                                existingCsValue = findCriteriaValue(exists.ID.Value, criteriaSet, splittedValue.AdditionalInfo);
+                                existingCsValue = findCriteriaValue(exists.ID.Value, criteriaSet, splittedValue.Alias);
                         }
 
                         //add new value if it doesn't exists
                         if (existingCsValue == null)
                         {
-                            var value = exists.ID != null && exists.ID.Value != otherArtworkScValueId ? splittedValue.CodeValue : splittedValue.AdditionalInfo;
+                            var value = exists.ID != null && exists.ID.Value != otherArtworkScValueId ? splittedValue.CodeValue : splittedValue.Alias;
                             if (exists.ID != null)
-                                createNewValue(criteriaCode, value, exists.ID.Value, "CUST", splittedValue.AdditionalInfo);
+                                createNewValue(criteriaCode, value, exists.ID.Value, "CUST", splittedValue.Alias);
                         }
                         else
                         {
                             //update value if it exists
-                            existingCsValue.CriteriaValueDetail = splittedValue.AdditionalInfo;
+                            existingCsValue.CriteriaValueDetail = splittedValue.Alias;
                         }
                     }
                 });
@@ -1644,9 +1789,9 @@ namespace ImportPOC2
 
                     string time = productionTime.CodeValue;
 
-                    if (!string.IsNullOrWhiteSpace(productionTime.AdditionalInfo))
+                    if (!string.IsNullOrWhiteSpace(productionTime.Alias))
                     {
-                        comment = productionTime.AdditionalInfo;
+                        comment = productionTime.Alias;
                     }
 
                     var exists = existingCsvalues.FirstOrDefault(v => v.Value != null && v.Value.UnitValue == time && v.CriteriaValueDetail == comment);
@@ -1791,46 +1936,6 @@ namespace ImportPOC2
             //throw new NotImplementedException();
         }
 
-        private static void processSizeGroups(string text)
-        {
-            //throw new NotImplementedException();
-        }
-
-        private static void processSizeValues(string text)
-        {
-            //throw new NotImplementedException();
-        }
-
-        private static void handleUpchargeQty(string text, string colName)
-        {
-            //throw new NotImplementedException();
-        }
-
-        private static void handleUpchargePrices(string text, string colName)
-        {
-            //throw new NotImplementedException();
-        }
-
-        private static void handleUpchargeDiscounts(string text, string colName)
-        {
-            //throw new NotImplementedException();
-        }
-
-        private static void handleBaseQty(string text, string colName)
-        {
-            //throw new NotImplementedException();
-        }
-
-        private static void handleBasePrices(string text, string colName)
-        {
-            //throw new NotImplementedException();
-        }
-
-        private static void handleBaseDiscountCodes(string text, string colName)
-        {
-            //throw new NotImplementedException();
-        }
-
         private static void processProductColors(string text)
         {
             //colors are comma delimited 
@@ -1890,6 +1995,8 @@ namespace ImportPOC2
             }
         }
 
+        //TODO: can we "detect" what value type code to use instead of passing it in? 
+        //TODO: pass in criteria set, it's known from everywhere it is invoked
         private static void createNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "")
         {
             var cSet = getCriteriaSetByCode(criteriaCode, optionName) ;
@@ -1902,7 +2009,8 @@ namespace ImportPOC2
                 Value = value,
                 ID = --_globalUniqueId,
                 ValueTypeCode = valueTypeCode,
-                CriteriaValueDetail = valueDetail
+                CriteriaValueDetail = valueDetail,
+                FormatValue = value.ToString() //default formatvalue to be same as value
             };
 
             //create new criteria set code value
@@ -1962,24 +2070,33 @@ namespace ImportPOC2
             return newCs;
         }
 
-        private static CriteriaSetValue getCsValueBySetCodeValueId(long scvId, ProductCriteriaSet criteriaSet)
-        {           
-            CriteriaSetValue retVal = null;
-
-            if (criteriaSet != null)
-            {                               
-                foreach (var v in 
-                    from v in criteriaSet.CriteriaSetValues 
+        private static CriteriaSetValue getCsValueBySetCodeValueId(long scvId, IEnumerable<CriteriaSetValue> criteriaSetValues)
+        {
+            return (from v in criteriaSetValues 
                     let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId) 
-                    where scv != null select v)
-                {                    
-                    retVal = v;
-                    break;
-                }
-            }
-
-            return retVal; 
+                    where scv != null 
+                    select v)
+                    .FirstOrDefault();
         }
+
+        //private static CriteriaSetValue getCsValueBySetCodeValueId(long scvId, ProductCriteriaSet criteriaSet)
+        //{           
+        //    CriteriaSetValue retVal = null;
+
+        //    if (criteriaSet != null)
+        //    {                               
+        //        foreach (var v in 
+        //            from v in criteriaSet.CriteriaSetValues 
+        //            let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId) 
+        //            where scv != null select v)
+        //        {                    
+        //            retVal = v;
+        //            break;
+        //        }
+        //    }
+
+        //    return retVal; 
+        //}
 
         private static CriteriaSetValue findCriteriaValue(long scvId, ProductCriteriaSet criteriaSet, string criteriaValue)
         {
@@ -1991,6 +2108,7 @@ namespace ImportPOC2
                     .FirstOrDefault();
         }
 
+        //TODO: pretty sure this can be done without passing in criteriaset parameter
         private static void deleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<string> models, ProductCriteriaSet criteriaSet)
         {
             //delete values that are missing from the list in the file
@@ -2007,7 +2125,7 @@ namespace ImportPOC2
             //delete values that are missing from the list in the file
             var csValuesToDelete = new List<CriteriaSetValue>();
             entities.ToList().ForEach(e => {
-                var exists = models.FirstOrDefault(m => m.CodeValue == e.Value.UnitValue && m.AdditionalInfo == e.CriteriaValueDetail);
+                var exists = models.FirstOrDefault(m => m.CodeValue == e.Value.UnitValue && m.Alias == e.CriteriaValueDetail);
                 if (exists == null)
                 {
                     csValuesToDelete.Add(e);

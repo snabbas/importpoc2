@@ -14,14 +14,14 @@ namespace ImportPOC2
         public static HttpClient RadarHttpClient;
         public static int CurrentCompanyId;
 
-        private static List<CodeValueLookUp> _imprintMethodsLookup = null;
-        public static List<CodeValueLookUp> ImprintMethodsLookup
+        private static List<GenericLookUp> _imprintMethodsLookup = null;
+        public static List<GenericLookUp> ImprintMethodsLookup
         {
             get
             {
                 if (_imprintMethodsLookup == null)
                 {
-                    _imprintMethodsLookup = new List<CodeValueLookUp>();
+                    _imprintMethodsLookup = new List<GenericLookUp>();
                     var results = RadarHttpClient.GetAsync("lookup/imprint_methods").Result;
                     if (results.IsSuccessStatusCode)
                     {
@@ -30,7 +30,7 @@ namespace ImportPOC2
 
                         if (deserializedList != null)
                         {
-                            deserializedList.ForEach(l => _imprintMethodsLookup.Add(new CodeValueLookUp { Code = l.ID.ToString(), Value = l.CodeValue }));
+                            deserializedList.ForEach(l => _imprintMethodsLookup.Add(new GenericLookUp {ID = l.ID, CodeValue = l.CodeValue }));
                         }
                     }
                 }
