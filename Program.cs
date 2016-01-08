@@ -313,8 +313,8 @@ namespace ImportPOC2
             //rush time
             //same day
             processPackagingOptions(_curProdRow.Packaging);
-            processShippingItems(_curProdRow.Shipping_Items);           
-            //shipping dimensions
+            processShippingItems(_curProdRow.Shipping_Items);
+            processShippingDimensions(_curProdRow.Shipping_Dimensions);            
             //shipping weight
             //shipping bills by
             //ship plain box
@@ -1098,18 +1098,17 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                var criteriaCode = "SHES";
                 var shippingItems = text.Split(':');
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-
                 if (shippingItems.Length == 2)
                 {
+                    var criteriaCode = "SHES";                
+                    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                    var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                     var items = shippingItems[0];
                     var unit = shippingItems[1];
                     var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Unit");
                     var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.DisplayName == unit);
+
                     if (unitFound != null)
                     {
                         var exists = existingCsvalues.Select(v => v.Value).SingleOrDefault();
@@ -1148,6 +1147,73 @@ namespace ImportPOC2
                         addValidationError(criteriaCode, unit);
                         _hasErrors = true;
                     }
+                }
+            }
+        }
+        
+        private static void processShippingDimensions(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                var criteriaCode = "SDIM"; 
+                var dimentionTypes = new string[] {"Length", "Width", "Height"};
+                var shippingDimensions = text.Split(';');
+
+                for (var i = 0; i < shippingDimensions.Length; i++)
+                {
+                    processDimension(criteriaCode, dimentionTypes[i], shippingDimensions[i]);
+                }                
+            }
+        }
+
+        private static void processDimension(string criteriaCode, string dimentionType, string dimensionUnitValue)
+        {
+            var dimensionValues = dimensionUnitValue.Split(':');
+
+            if (dimensionValues.Length == 2)
+            {
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+
+                var dimension = dimensionValues[0];
+                var unit = dimensionValues[1];
+
+                var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, dimentionType);
+                var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == unit);
+                if (unitFound != null)
+                {                   
+                    var value = new
+                    {
+                        CriteriaAttributeId = criteriaAttribute.ID,
+                        UnitValue = dimension,
+                        UnitOfMeasureCode = unit
+                    };
+
+                    if (existingCsvalues.Count() == 0)
+                    {
+                        //add new value if it doesn't exist                       
+                        var group = criteriaAttribute.CriteriaItem.CodeValueGroups.FirstOrDefault();
+                        var setCodeValueId = 0L;
+                        if (group != null)
+                        {
+                            var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                            if (setCodeValue != null)
+                                setCodeValueId = setCodeValue.ID;
+                        }
+                        var valueList = new List<dynamic>();
+                        valueList.Add(value);
+                        createNewValue(criteriaCode, valueList, setCodeValueId, "CUST");
+                    }
+                    else
+                    {
+                        existingCsvalues.FirstOrDefault().Value.Add(value);                          
+                    }                    
+                }
+                else
+                {
+                    //log batch error
+                    addValidationError(criteriaCode, unit);
+                    _hasErrors = true;
                 }
             }
         }
