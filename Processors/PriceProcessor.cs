@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
-using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
 using Radar.Models.Pricing;
 
@@ -86,7 +85,56 @@ namespace ImportPOC2.Processors
         {
             //TODO: using sheetrow, build a price object, then test against collection for add/change
             // does it make sense to use collection length and # of sheet cols to determine new? 
+            var newPrice = createPrice(sheetRow.Q1, sheetRow.P1, sheetRow.D1);
+            newPrice = createPrice(sheetRow.Q2, sheetRow.P2, sheetRow.D2);
+            newPrice = createPrice(sheetRow.Q3, sheetRow.P3, sheetRow.D3);
+            newPrice = createPrice(sheetRow.Q4, sheetRow.P4, sheetRow.D4);
+            newPrice = createPrice(sheetRow.Q5, sheetRow.P5, sheetRow.D5);
+            newPrice = createPrice(sheetRow.Q6, sheetRow.P6, sheetRow.D6);
+            newPrice = createPrice(sheetRow.Q7, sheetRow.P7, sheetRow.D7);
+            newPrice = createPrice(sheetRow.Q8, sheetRow.P8, sheetRow.D8);
+            newPrice = createPrice(sheetRow.Q9, sheetRow.P9, sheetRow.D9);
+            newPrice = createPrice(sheetRow.Q10, sheetRow.P10, sheetRow.D10);
+        }
 
+        private Price createPrice(string qty, string price, string discountCode)
+        {
+            Price newPrice = null;
+            if (!string.IsNullOrWhiteSpace(qty) && !string.IsNullOrWhiteSpace(price) )//&& !string.IsNullOrWhiteSpace(discountCode))
+            {
+                int parsedQty = 0;
+                Int32.TryParse(qty, out parsedQty);
+
+                decimal parsedPrice = 0;
+                decimal.TryParse(price, out parsedPrice);
+
+                newPrice = new Price
+                {
+                    Quantity = parsedQty,
+                    ListPrice = parsedPrice,
+                    DiscountRate = getDiscountByCode(discountCode)
+                };
+            }
+
+            return newPrice;
+        }
+
+        //lookup discount object by code
+        private DiscountRate getDiscountByCode(string discountCode)
+        {
+            var retVal = Lookups.DiscountRates.FirstOrDefault(r => r.IndustryDiscountCode == "Z");
+
+            if (!string.IsNullOrWhiteSpace(discountCode))
+            {
+                var existing = Lookups.DiscountRates.FirstOrDefault(r => r.IndustryDiscountCode == discountCode);
+
+                if (existing != null)
+                {
+                    retVal = existing;
+                }
+            }
+
+            return retVal;
         }
 
         private void fillUpchargePricesFromSheet(ICollection<Price> collection, ProductRow sheetRow)

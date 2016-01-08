@@ -1,13 +1,11 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Text;
-using System.Threading.Tasks;
 using Newtonsoft.Json;
 using Radar.Models.Company;
 using Radar.Models.Criteria;
 using Radar.Core.Common;
+using Radar.Models.Pricing;
 
 namespace ImportPOC2
 {
@@ -423,6 +421,26 @@ namespace ImportPOC2
                 return _personalizationLookup;
             }
             set { _personalizationLookup = value; }
+        }
+
+        private static List<DiscountRate> _discountRates = null;
+        public static List<DiscountRate> DiscountRates
+        {
+            get
+            {
+                if (_discountRates == null)
+                {
+                    _discountRates = new List<DiscountRate>();
+                    var results = RadarHttpClient.GetAsync("lookup/discount_rates").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _discountRates = JsonConvert.DeserializeObject<List<DiscountRate>>(content);
+                    }
+                }
+                return _discountRates;
+            }
+            set { _discountRates = value; }
         }
     }
 }
