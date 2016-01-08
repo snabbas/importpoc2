@@ -314,10 +314,8 @@ namespace ImportPOC2
             //same day
             processPackagingOptions(_curProdRow.Packaging);
             processShippingItems(_curProdRow.Shipping_Items);
-            processShippingDimensions(_curProdRow.Shipping_Dimensions);            
-            //shipping weight
-            //shipping bills by
-            //ship plain box
+            processShippingDimensions(_curProdRow.Shipping_Dimensions);
+            processShippingWeight(_curProdRow.Shipping_Weight);           
             processComplianceCertifications(_curProdRow.Comp_Cert);           
             processSafetyWarnings(_curProdRow.Safety_Warnings);
         }        
@@ -1155,68 +1153,82 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                var criteriaCode = "SDIM"; 
+                var criteriaCode = "SDIM";
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                 var dimentionTypes = new string[] {"Length", "Width", "Height"};
                 var shippingDimensions = text.Split(';');
 
                 for (var i = 0; i < shippingDimensions.Length; i++)
                 {
                     processDimension(criteriaCode, dimentionTypes[i], shippingDimensions[i]);
-                }                
+                }              
             }
         }
 
         private static void processDimension(string criteriaCode, string dimentionType, string dimensionUnitValue)
         {
-            var dimensionValues = dimensionUnitValue.Split(':');
-
-            if (dimensionValues.Length == 2)
+            if (!string.IsNullOrWhiteSpace(dimensionUnitValue))
             {
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                var dimensionValues = dimensionUnitValue.Split(':');
 
-                var dimension = dimensionValues[0];
-                var unit = dimensionValues[1];
+                if (dimensionValues.Length == 2)
+                {
+                    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                    var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
-                var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, dimentionType);
-                var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == unit);
-                if (unitFound != null)
-                {                   
-                    var value = new
+                    var dimension = dimensionValues[0];
+                    var unit = dimensionValues[1];
+
+                    var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, dimentionType);
+                    var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == unit);
+                    if (unitFound != null)
                     {
-                        CriteriaAttributeId = criteriaAttribute.ID,
-                        UnitValue = dimension,
-                        UnitOfMeasureCode = unit
-                    };
-
-                    if (existingCsvalues.Count() == 0)
-                    {
-                        //add new value if it doesn't exist                       
-                        var group = criteriaAttribute.CriteriaItem.CodeValueGroups.FirstOrDefault();
-                        var setCodeValueId = 0L;
-                        if (group != null)
+                        var value = new
                         {
-                            var setCodeValue = group.SetCodeValues.FirstOrDefault();
-                            if (setCodeValue != null)
-                                setCodeValueId = setCodeValue.ID;
+                            CriteriaAttributeId = criteriaAttribute.ID,
+                            UnitValue = dimension,
+                            UnitOfMeasureCode = unit
+                        };
+
+                        if (existingCsvalues.Count() == 0)
+                        {
+                            //add new value if it doesn't exist                       
+                            var group = criteriaAttribute.CriteriaItem.CodeValueGroups.FirstOrDefault();
+                            var setCodeValueId = 0L;
+                            if (group != null)
+                            {
+                                var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                                if (setCodeValue != null)
+                                    setCodeValueId = setCodeValue.ID;
+                            }
+                            var valueList = new List<dynamic>();
+                            valueList.Add(value);
+                            createNewValue(criteriaCode, valueList, setCodeValueId, "CUST");
                         }
-                        var valueList = new List<dynamic>();
-                        valueList.Add(value);
-                        createNewValue(criteriaCode, valueList, setCodeValueId, "CUST");
+                        else
+                        {
+                            existingCsvalues.FirstOrDefault().Value.Add(value);
+                        }
                     }
                     else
                     {
-                        existingCsvalues.FirstOrDefault().Value.Add(value);                          
-                    }                    
-                }
-                else
-                {
-                    //log batch error
-                    addValidationError(criteriaCode, unit);
-                    _hasErrors = true;
+                        //log batch error
+                        addValidationError(criteriaCode, unit);
+                        _hasErrors = true;
+                    }
                 }
             }
         }
+
+        private static void processShippingWeight(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                var criteriaCode = "SHWT";
+                processDimension(criteriaCode, "Unit", text);               
+            }
+        }      
 
         private static void processPackagingOptions(string text)
         {
