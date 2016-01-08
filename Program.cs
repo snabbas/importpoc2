@@ -20,8 +20,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using Constants = Radar.Core.Common.Constants;
-using ProductKeyword = Radar.Models.Product.ProductKeyword;
-using ProductMediaItem = Radar.Models.Product.ProductMediaItem;
 
 [assembly: log4net.Config.XmlConfigurator(Watch = true)]
 
@@ -1026,11 +1024,9 @@ namespace ImportPOC2
             if (_firstRowForProduct)
             {
                 //var valueList = text.ConvertToList();
-                List<string> valueList = new List<string>();
+                var valueList = new List<string> {"Debossed=My Debossed", "Engraved"};
 
                 //for the moment hard-coding this because ConvertToList method needs to be fixed to handle values like Debossed=My Debossed
-                valueList.Add("Debossed=My Debossed");
-                valueList.Add("Engraved");
 
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
                 var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
@@ -1092,7 +1088,6 @@ namespace ImportPOC2
                     }
                     else
                     {
-                        long smplScvId = 0;
                         var criteria = Lookups.ImprintCriteriaLookup.FirstOrDefault(c => c.Code == "SMPL");
                         if (criteria != null)
                         {
@@ -1100,10 +1095,10 @@ namespace ImportPOC2
                             if (group != null)
                             {
                                 //get set code value based on sampleType param; this will be "Product Sample" or "Spec Sample"
-                                var setCodeValue = group.SetCodeValues.Where(s => s.CodeValue == sampleType).FirstOrDefault();
+                                var setCodeValue = group.SetCodeValues.FirstOrDefault(s => s.CodeValue == sampleType);
                                 if (setCodeValue != null)
                                 {
-                                    smplScvId = setCodeValue.ID;
+                                    long smplScvId = setCodeValue.ID;
                                     createNewValue("SMPL", sampleType, smplScvId);
                                 }
                             }
@@ -1234,13 +1229,13 @@ namespace ImportPOC2
             {
                 var criteriaCode = "SDIM";
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-                var dimentionTypes = new string[] {"Length", "Width", "Height"};
+                //var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                var dimensionTypes = new string[] {"Length", "Width", "Height"};
                 var shippingDimensions = text.Split(';');
 
                 for (var i = 0; i < shippingDimensions.Length; i++)
                 {
-                    processDimension(criteriaCode, dimentionTypes[i], shippingDimensions[i]);
+                    processDimension(criteriaCode, dimensionTypes[i], shippingDimensions[i]);
                 }              
             }
         }
@@ -1270,7 +1265,7 @@ namespace ImportPOC2
                             UnitOfMeasureCode = unit
                         };
 
-                        if (existingCsvalues.Count() == 0)
+                        if (!existingCsvalues.Any())
                         {
                             //add new value if it doesn't exist                       
                             var group = criteriaAttribute.CriteriaItem.CodeValueGroups.FirstOrDefault();
@@ -1281,13 +1276,14 @@ namespace ImportPOC2
                                 if (setCodeValue != null)
                                     setCodeValueId = setCodeValue.ID;
                             }
-                            var valueList = new List<dynamic>();
-                            valueList.Add(value);
+                            var valueList = new List<dynamic> {value};
                             createNewValue(criteriaCode, valueList, setCodeValueId, "CUST");
                         }
                         else
                         {
-                            existingCsvalues.FirstOrDefault().Value.Add(value);
+                            var criteriaSetValue = existingCsvalues.FirstOrDefault();
+                            if (criteriaSetValue != null)
+                                criteriaSetValue.Value.Add(value);
                         }
                     }
                     else
@@ -1304,8 +1300,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                var criteriaCode = "SHWT";
-                processDimension(criteriaCode, "Unit", text);               
+                processDimension("SHWT", "Unit", text);               
             }
         }      
 
@@ -1391,10 +1386,9 @@ namespace ImportPOC2
             //comma delimited list of imprint size locations
             if (_firstRowForProduct)
             {
-                string criteriaCode = Constants.CriteriaCodes.ImprintSizeLocation;
+                var criteriaCode = Constants.CriteriaCodes.ImprintSizeLocation;
                 var imprintSizes = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                ICollection<CriteriaSetValue> existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                 long customImprintSizeLocationScvId = 0;
 
                 var imsz = Lookups.ImprintSizeLocationLookup.FirstOrDefault();
@@ -1414,10 +1408,7 @@ namespace ImportPOC2
 
                 if (type == "size")
                 {
-                    imprintSizes.ForEach(item =>
-                    {
-                        createNewValue(criteriaCode, item, customImprintSizeLocationScvId, "CUST");
-                    });
+                    imprintSizes.ForEach(item => createNewValue(criteriaCode, item, customImprintSizeLocationScvId, "CUST"));
                 }
                 //update the imsz objects created with imprint size processing with imprint location values
                 else
@@ -1548,45 +1539,44 @@ namespace ImportPOC2
             {
                 //var valueList = text.ConvertToList();
                 //for the moment hard-coding this because ConvertToList method needs to be fixed to handle values like Debossed=My Debossed
-                List<string> valueList = new List<string>();
-                valueList.Add("Virtual Proof");
-                valueList.Add("Pre-production Proof");
-                valueList.Add("Art Services:test art services");
-                valueList.Add("Other:other artwork comments");
+                var valueList = new List<string> {"Virtual Proof", "Pre-production Proof", "Art Services:test art services", "Other:other artwork comments"};
 
                 var criteriaCode = Constants.CriteriaCodes.Artwork;
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                 var otherArtworkScValue = Lookups.ArtworkLookup.FirstOrDefault(a => a.CodeValue == "Other");
                 long otherArtworkScValueId = 0;
 
                 if (otherArtworkScValue != null)
                 {
-                    otherArtworkScValueId = otherArtworkScValue.ID.Value;
+                    if (otherArtworkScValue.ID != null)
+                        otherArtworkScValueId = otherArtworkScValue.ID.Value;
                 }
 
                 valueList.ForEach(item =>
                 {
                     var splittedValue = item.SplitValue(':');
                     var exists = Lookups.ArtworkLookup.FirstOrDefault(l => String.Equals(l.CodeValue, splittedValue.CodeValue, StringComparison.CurrentCultureIgnoreCase));
-                    CriteriaSetValue existingCsValue = null;
 
                     if (exists != null)
                     {
+                        CriteriaSetValue existingCsValue = null;
                         if (exists.ID != otherArtworkScValueId)
                         {
-                            existingCsValue = getCsValueBySetCodeValueId(exists.ID.Value, criteriaSet);
+                            if (exists.ID != null)
+                                existingCsValue = getCsValueBySetCodeValueId(exists.ID.Value, criteriaSet);
                         }
                         else
                         {
-                            existingCsValue = FindCriteriaValue(exists.ID.Value, criteriaSet, splittedValue.AdditionalInfo);
+                            if (exists.ID != null)
+                                existingCsValue = findCriteriaValue(exists.ID.Value, criteriaSet, splittedValue.AdditionalInfo);
                         }
 
                         //add new value if it doesn't exists
                         if (existingCsValue == null)
                         {
-                            var value = exists.ID.Value != otherArtworkScValueId ? splittedValue.CodeValue : splittedValue.AdditionalInfo;
-                            createNewValue(criteriaCode, value, exists.ID.Value, "CUST", splittedValue.AdditionalInfo);
+                            var value = exists.ID != null && exists.ID.Value != otherArtworkScValueId ? splittedValue.CodeValue : splittedValue.AdditionalInfo;
+                            if (exists.ID != null)
+                                createNewValue(criteriaCode, value, exists.ID.Value, "CUST", splittedValue.AdditionalInfo);
                         }
                         else
                         {
@@ -1646,17 +1636,13 @@ namespace ImportPOC2
                     }
                 }
 
-                productionTimesTokens.ForEach(token =>
-                {
-                   productionTimes.Add(token.SplitValue(':'));
-                });
+                productionTimesTokens.ForEach(token => productionTimes.Add(token.SplitValue(':')));
 
                 productionTimes.ForEach(productionTime =>
-                {                   
-                    var time = string.Empty;
+                {
                     var comment = string.Empty;
 
-                    time = productionTime.CodeValue;
+                    string time = productionTime.CodeValue;
 
                     if (!string.IsNullOrWhiteSpace(productionTime.AdditionalInfo))
                     {
@@ -1995,21 +1981,14 @@ namespace ImportPOC2
             return retVal; 
         }
 
-        private static CriteriaSetValue FindCriteriaValue(long scvId, ProductCriteriaSet criteriaSet, string criteriaValue)
+        private static CriteriaSetValue findCriteriaValue(long scvId, ProductCriteriaSet criteriaSet, string criteriaValue)
         {
-            CriteriaSetValue retVal = null;
-
-            foreach (var v in
-                    from v in criteriaSet.CriteriaSetValues
-                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
-                    where scv != null && v.Value == criteriaValue
+            return (from v in criteriaSet.CriteriaSetValues 
+                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId) 
+                    where scv != null 
+                        && v.Value == criteriaValue 
                     select v)
-            {
-                retVal = v;
-                break;
-            }
-
-            return retVal;
+                    .FirstOrDefault();
         }
 
         private static void deleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<string> models, ProductCriteriaSet criteriaSet)
@@ -2136,10 +2115,10 @@ namespace ImportPOC2
         private static List<GenericLookUp> validateLookupValues(IEnumerable<string> inputValueList, List<GenericLookUp> lookupList)
         {
             //var inputValueList = strInputLookups.ConvertToList();
-            return (from value in inputValueList 
-                    let existingLookup = lookupList.Find(l => l.CodeValue == value) 
-                    select existingLookup ?? new GenericLookUp {CodeValue = value, ID = null})
-                    .ToList();
+            return (from value in inputValueList
+                let existingLookup = lookupList.Find(l => l.CodeValue == value)
+                select existingLookup ?? new GenericLookUp {CodeValue = value, ID = null})
+                .ToList();
         }
 
         private static bool compareColumns(IEnumerable<string> columnMetaData)
