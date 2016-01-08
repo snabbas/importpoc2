@@ -309,6 +309,7 @@ namespace ImportPOC2
             processProductSample(_curProdRow.Product_Sample);            
             //spec sample
             //production time
+            processProductionTime(_curProdRow.Production_Time); 
             //rush service
             //rush time
             //same day
@@ -1453,6 +1454,66 @@ namespace ImportPOC2
 
         }
 
+        private static void processProductionTime(string text)
+        {
+            if (_firstRowForProduct)
+            {
+                var criteriaCode = Constants.CriteriaCodes.ProductionTime;
+                var productionTimes = new List<FieldInfo>();
+                var productionTimesTokens = text.ConvertToList();
+                long customSetCodeValueId = 0;
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();                
+               
+                var criteriaLookUp = Lookups.ProductionTimeCriteriaLookup.FirstOrDefault(i => i.Code == criteriaCode);
+
+                if (criteriaLookUp != null)
+                {
+                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    if (group != null)
+                    {
+                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                        if (setCodeValue != null)
+                            customSetCodeValueId = setCodeValue.ID;
+                    }
+                }
+
+                productionTimesTokens.ForEach(token =>
+                {
+                   productionTimes.Add(token.SplitValue(':'));
+                });
+
+                productionTimes.ForEach(productionTime =>
+                {                   
+                    var time = string.Empty;
+                    var comment = string.Empty;
+
+                    time = productionTime.CodeValue;
+
+                    if (!string.IsNullOrWhiteSpace(productionTime.AdditionalInfo))
+                    {
+                        comment = productionTime.AdditionalInfo;
+                    }
+
+                    var exists = existingCsvalues.FirstOrDefault(v => v.Value != null && v.Value.UnitValue == time && v.CriteriaValueDetail == comment);
+                    //add new value if it doesn't exists
+                    if (exists == null)
+                    {
+                        var value = new 
+                        {
+                              CriteriaAttributeId = 13,
+                              UnitValue = time,
+                              UnitOfMeasureCode = "BUSI"
+                        };
+
+                         createNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment);
+                    }                   
+                });                
+
+                deleteCsValues(existingCsvalues, productionTimes, criteriaSet);               
+            }
+        }      
+
         private static void processSafetyWarnings(string text)
         {
             if (_firstRowForProduct)
@@ -1770,6 +1831,25 @@ namespace ImportPOC2
             valuesToDelete.ForEach(e =>
             {
                 var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == e);
+                criteriaSet.CriteriaSetValues.Remove(toDelete);
+            });
+        }
+
+        private static void deleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<FieldInfo> models, ProductCriteriaSet criteriaSet)
+        {
+            //delete values that are missing from the list in the file
+            var csValuesToDelete = new List<CriteriaSetValue>();
+            entities.ToList().ForEach(e => {
+                var exists = models.FirstOrDefault(m => m.CodeValue == e.Value.UnitValue && m.AdditionalInfo == e.CriteriaValueDetail);
+                if (exists == null)
+                {
+                    csValuesToDelete.Add(e);
+                }
+            });
+
+            csValuesToDelete.ForEach(e =>
+            {
+                var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v == e);
                 criteriaSet.CriteriaSetValues.Remove(toDelete);
             });
         }

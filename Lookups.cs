@@ -301,6 +301,25 @@ namespace ImportPOC2
             set { _imprintCriteriaLookup = value; }
         }
 
+        private static List<ImprintCriteriaLookUp> _productionTimeCriteriaLookup = null;
+        public static List<ImprintCriteriaLookUp> ProductionTimeCriteriaLookup
+        {
+            get
+            {
+                if (_productionTimeCriteriaLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/criteria?code=PRTM").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _productionTimeCriteriaLookup = JsonConvert.DeserializeObject<List<ImprintCriteriaLookUp>>(content);
+                    }
+                }
+                return _productionTimeCriteriaLookup;
+            }
+            set { _productionTimeCriteriaLookup = value; }
+        }
+
         private static List<CriteriaItem> _imprintColorLookup = null;
         public static List<CriteriaItem> ImprintColorLookup
         {
