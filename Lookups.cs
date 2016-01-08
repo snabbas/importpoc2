@@ -320,23 +320,23 @@ namespace ImportPOC2
             set { _imprintColorLookup = value; }
         }
 
-        private static List<CriteriaItem> _imprintSizeLocation = null;
-        public static List<CriteriaItem> ImprintSizeLocation
+        private static List<CriteriaItem> _imprintSizeLocationLookup = null;
+        public static List<CriteriaItem> ImprintSizeLocationLookup
         {
             get
             {
-                if (_imprintSizeLocation == null)
-                {
+                if (_imprintSizeLocationLookup == null)
+                {                    
                     var results = RadarHttpClient.GetAsync("lookup/criteria?code=IMSZ").Result;
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        _imprintColorLookup = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);
+                        _imprintSizeLocationLookup = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);                       
                     }
                 }
-                return _imprintSizeLocation;
+                return _imprintSizeLocationLookup;
             }
-            set { _imprintSizeLocation = value; }
+            set { _imprintSizeLocationLookup = value; }
         }
 
         private static List<LineName> _linenamesLookup = null;
@@ -358,21 +358,21 @@ namespace ImportPOC2
             set { _linenamesLookup = value; }
         }
 
-        private static List<CodeValueLookUp> _artworkLookup = null;
-        public static List<CodeValueLookUp> ArtworkLookup
+        private static List<GenericLookUp> _artworkLookup = null;
+        public static List<GenericLookUp> ArtworkLookup
         {
             get
             {
                 if (_artworkLookup == null)
                 {
-                    _artworkLookup = new List<CodeValueLookUp>(); 
+                    _artworkLookup = new List<GenericLookUp>(); 
                     var artworks = ImprintCriteriaLookup.FirstOrDefault(l => l.Code == Constants.CriteriaCodes.Artwork);
                     if (artworks != null)
                     {
                         var group = artworks.CodeValueGroups.FirstOrDefault();
                         if (group != null)
                         {
-                            group.SetCodeValues.ToList().ForEach(s => _artworkLookup.Add(new CodeValueLookUp { Code = s.ID.ToString(), Value = s.CodeValue }));
+                            group.SetCodeValues.ToList().ForEach(s => _artworkLookup.Add(new GenericLookUp { ID = s.ID, CodeValue = s.CodeValue }));
                         }
                     }                   
                 }

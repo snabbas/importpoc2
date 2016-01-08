@@ -306,8 +306,8 @@ namespace ImportPOC2
             processImprintLocations(_curProdRow.Imprint_Location);
             processAdditionalColors(_curProdRow.Additional_Color);
             processAdditionalLocations(_curProdRow.Additional_Location);
-            processProductSample(_curProdRow.Product_Sample);            
-            //spec sample
+            processProductSample(_curProdRow.Product_Sample);  
+            processSpecSample(_curProdRow.Spec_Sample);           
             //production time
             //rush service
             //rush time
@@ -857,12 +857,15 @@ namespace ImportPOC2
 
         //changed to use generic processing method
         private static void processShapes(string text)
-        {            
+        {                        
             genericProcess(text, Constants.CriteriaCodes.Shape, Lookups.ShapesLookup);
         }
 
         private static void genericProcess(string text, string criteriaCode, IEnumerable<GenericLookUp> lookup)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             if (_firstRowForProduct)
             {
                 var valueList = text.ConvertToList();
@@ -898,6 +901,9 @@ namespace ImportPOC2
         //TODO: I want this to be a single method that uses the same lookup type as method below
         private static void genericProcess(string text, string criteriaCode, IEnumerable<SetCodeValue> lookup)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             //comma delimited list of type
             if (_firstRowForProduct)
             {
@@ -933,6 +939,9 @@ namespace ImportPOC2
         //TODO: see above, this should be same method as above. 
         private static void genericProcess(string text, string criteriaCode, IEnumerable<KeyValueLookUp> lookup)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             //comma delimited list of type
             if (_firstRowForProduct)
             {
@@ -968,6 +977,9 @@ namespace ImportPOC2
 
         private static void genericProcessImprintCriteria(string text, string criteriaCode)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             if (_firstRowForProduct)
             {
                 var valueList = text.ConvertToList();
@@ -1008,6 +1020,9 @@ namespace ImportPOC2
         //this generic method will handle the processing for imprint methods and personalization
         private static void genericProcessImprintMethods(string text, string criteriaCode, IEnumerable<CodeValueLookUp> lookup)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             //comma separated list of values
             if (_firstRowForProduct)
             {
@@ -1047,13 +1062,76 @@ namespace ImportPOC2
             }
         }
 
-        private static void processThemes(string text)
+        //this generic method will handle the processing for product and spec samples
+        private static void genericProcessSamples(string text, string criteriaCode, IEnumerable<ImprintCriteriaLookUp> lookup, string sampleType)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
+            //comma separated list of values
+            if (_firstRowForProduct)
+            {
+                //should have only one value
+                var splittedValue = text.SplitValue(':');
+                //should have Y/N as the first value                
+                var validValues = new[] { "Y", "N" };
+                if (!string.IsNullOrWhiteSpace(splittedValue.CodeValue) && !validValues.Contains(splittedValue.CodeValue))
+                {
+                    addValidationError("GNER", "invalid value for Samples");
+                    return;
+                }
+
+                var criteriaSet = getCriteriaSetByCode("SMPL");   
+
+                if (splittedValue.CodeValue == Constants.BooleanFlag.TRUE)
+                {                                                         
+                    //check if the sample value already exists
+                    var csValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == sampleType);
+                    if (csValue != null)
+                    {
+                        csValue.CriteriaValueDetail = splittedValue.AdditionalInfo;
+                    }
+                    else
+                    {
+                        long smplScvId = 0;
+                        var criteria = Lookups.ImprintCriteriaLookup.FirstOrDefault(c => c.Code == "SMPL");
+                        if (criteria != null)
+                        {
+                            var group = criteria.CodeValueGroups.FirstOrDefault();
+                            if (group != null)
+                            {
+                                //get set code value based on sampleType param; this will be "Product Sample" or "Spec Sample"
+                                var setCodeValue = group.SetCodeValues.Where(s => s.CodeValue == sampleType).FirstOrDefault();
+                                if (setCodeValue != null)
+                                {
+                                    smplScvId = setCodeValue.ID;
+                                    createNewValue("SMPL", sampleType, smplScvId);
+                                }
+                            }
+                        }
+                    }                                       
+                } 
+                else
+                {
+                    var existingValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == sampleType);
+                    if (existingValue != null)
+                    {
+                        criteriaSet.CriteriaSetValues.Remove(existingValue);
+                    }  
+                }               
+            }
+        }
+
+        private static void processThemes(string text)
+        {           
             genericProcess(text, Constants.CriteriaCodes.Theme, Lookups.ThemesLookup);
         }
 
         private static void processTradenames(string text)
-        {            
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             //comma delimited list of trade names
             if (_firstRowForProduct)
             {
@@ -1198,37 +1276,7 @@ namespace ImportPOC2
 
         private static void processImprintSizes(string text)
         {
-            //comma delimited list of imprint sizes
-            //if (_firstRowForProduct)
-            //{
-            //    string criteriaCode = Constants.CriteriaCodes.ImprintSizeLocation;
-            //    var imprintSizes = extractCsvList(text);
-            //    var criteriaSet = getCriteriaSetByCode(criteriaCode);
-            //    ICollection<CriteriaSetValue> existingCsvalues = new List<CriteriaSetValue>();
-            //    long customImprintSizeLocationScvId = 0;
-
-            //    //get id for imprint size location
-            //    var imsz = imprintSizeLocation.FirstOrDefault(i => i.Code == criteriaCode);
-            //    if (imsz != null)
-            //    {
-            //        var group = imsz.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
-            //        if (group != null)
-            //        {
-            //            customImprintSizeLocationScvId = group.SetCodeValues.FirstOrDefault().ID;
-            //        }
-            //    }
-
-            //    if (criteriaSet == null)
-            //    {
-            //        criteriaSet = AddCriteriaSet(criteriaCode);
-            //    }
-            //    else
-            //    {
-            //        existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-            //    }                
-
-            //    deleteCsValues(existingCsvalues, imprintSizes, criteriaSet);
-            //}
+            genericProcessImprintSizeLocations(text, "size");            
         }
 
         private static void processImprintMethods(string text)
@@ -1238,6 +1286,9 @@ namespace ImportPOC2
 
         private static void processPersonalization(string text)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             genericProcessImprintMethods(text, "PERS", Lookups.PersonalizationLookup);
             var pers = getCriteriaSetByCode("PERS");
 
@@ -1253,11 +1304,64 @@ namespace ImportPOC2
 
         private static void processImprintLocations(string text)
         {
-            //throw new NotImplementedException();
+            genericProcessImprintSizeLocations(text, "location");
+        }
+
+        private static void genericProcessImprintSizeLocations(string text, string type)
+        {
+            //comma delimited list of imprint size locations
+            if (_firstRowForProduct)
+            {
+                string criteriaCode = Constants.CriteriaCodes.ImprintSizeLocation;
+                var imprintSizes = text.ConvertToList();
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                ICollection<CriteriaSetValue> existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                long customImprintSizeLocationScvId = 0;
+
+                var imsz = Lookups.ImprintSizeLocationLookup.FirstOrDefault();
+                //get id for imprint size location
+                if (imsz != null)
+                {
+                    var group = imsz.CodeValueGroups.FirstOrDefault();
+                    if (group != null)
+                    {
+                        var setCodeValue = group.SetCodeValues.FirstOrDefault();
+                        if (setCodeValue != null)
+                        {
+                            customImprintSizeLocationScvId = setCodeValue.ID;                            
+                        }
+                    }
+                }              
+
+                if (type == "size")
+                {
+                    imprintSizes.ForEach(item =>
+                    {
+                        createNewValue(criteriaCode, item, customImprintSizeLocationScvId, "CUST");
+                    });
+                }
+                //update the imsz objects created with imprint size processing with imprint location values
+                else
+                {
+                    var addedValues = criteriaSet.CriteriaSetValues.ToList();
+                    for (var i = 0; i < imprintSizes.Count; i++)
+                    {
+                        if (!string.IsNullOrWhiteSpace(imprintSizes[i]))
+                        {
+                            addedValues[i].Value = addedValues[i].Value + "|" + imprintSizes[i];
+                        }
+                    }                    
+                } 
+              
+                //TODO: handles delete for imprint size locations
+            }
         }
 
         private static void processImprintColors(string text)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             //comma delimited list of imprint colors
             if (_firstRowForProduct)
             {
@@ -1301,6 +1405,9 @@ namespace ImportPOC2
 
         private static void processSoldUnimprinted(string text)
         {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             if (_firstRowForProduct)
             {
                 //should be Y/N
@@ -1354,7 +1461,64 @@ namespace ImportPOC2
 
         private static void processImprintArtwork(string text)
         {
-            //throw new NotImplementedException();
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
+            //comma delimited list of type
+            if (_firstRowForProduct)
+            {
+                //var valueList = text.ConvertToList();
+                //for the moment hard-coding this because ConvertToList method needs to be fixed to handle values like Debossed=My Debossed
+                List<string> valueList = new List<string>();
+                valueList.Add("Virtual Proof");
+                valueList.Add("Pre-production Proof");
+                valueList.Add("Art Services:test art services");
+                valueList.Add("Other:other artwork comments");
+
+                var criteriaCode = Constants.CriteriaCodes.Artwork;
+                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                var otherArtworkScValue = Lookups.ArtworkLookup.FirstOrDefault(a => a.CodeValue == "Other");
+                long otherArtworkScValueId = 0;
+
+                if (otherArtworkScValue != null)
+                {
+                    otherArtworkScValueId = otherArtworkScValue.ID.Value;
+                }
+
+                valueList.ForEach(item =>
+                {
+                    var splittedValue = item.SplitValue(':');
+                    var exists = Lookups.ArtworkLookup.FirstOrDefault(l => String.Equals(l.CodeValue, splittedValue.CodeValue, StringComparison.CurrentCultureIgnoreCase));
+                    CriteriaSetValue existingCsValue = null;
+
+                    if (exists != null)
+                    {
+                        if (exists.ID != otherArtworkScValueId)
+                        {
+                            existingCsValue = getCsValueBySetCodeValueId(exists.ID.Value, criteriaSet);
+                        }
+                        else
+                        {
+                            existingCsValue = FindCriteriaValue(exists.ID.Value, criteriaSet, splittedValue.AdditionalInfo);
+                        }
+
+                        //add new value if it doesn't exists
+                        if (existingCsValue == null)
+                        {
+                            var value = exists.ID.Value != otherArtworkScValueId ? splittedValue.CodeValue : splittedValue.AdditionalInfo;
+                            createNewValue(criteriaCode, value, exists.ID.Value, "CUST", splittedValue.AdditionalInfo);
+                        }
+                        else
+                        {
+                            //update value if it exists
+                            existingCsValue.CriteriaValueDetail = splittedValue.AdditionalInfo;
+                        }
+                    }
+                });
+
+                //TODO: handle delete for artworks               
+            }
         }
 
         private static void processAdditionalLocations(string text)
@@ -1371,8 +1535,12 @@ namespace ImportPOC2
 
         private static void processProductSample(string text)
         {
+            genericProcessSamples(text, "SMPL", Lookups.ImprintCriteriaLookup, "Product Sample");
+        }
 
-
+        private static void processSpecSample(string text)
+        {
+            genericProcessSamples(text, "SMPL", Lookups.ImprintCriteriaLookup, "Spec Sample");
         }
 
         private static void processSafetyWarnings(string text)
@@ -1446,7 +1614,10 @@ namespace ImportPOC2
         }
 
         private static void processLineNames(string text)
-        {            
+        {
+            if (string.IsNullOrWhiteSpace(text))
+                return;
+
             //comma delimited list of line names
             if (_firstRowForProduct)
             {
@@ -1676,13 +1847,30 @@ namespace ImportPOC2
                     from v in criteriaSet.CriteriaSetValues 
                     let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId) 
                     where scv != null select v)
-                {
+                {                    
                     retVal = v;
                     break;
                 }
             }
 
             return retVal; 
+        }
+
+        private static CriteriaSetValue FindCriteriaValue(long scvId, ProductCriteriaSet criteriaSet, string criteriaValue)
+        {
+            CriteriaSetValue retVal = null;
+
+            foreach (var v in
+                    from v in criteriaSet.CriteriaSetValues
+                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
+                    where scv != null && v.Value == criteriaValue
+                    select v)
+            {
+                retVal = v;
+                break;
+            }
+
+            return retVal;
         }
 
         private static void deleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<string> models, ProductCriteriaSet criteriaSet)

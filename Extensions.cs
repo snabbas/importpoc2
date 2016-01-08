@@ -41,7 +41,7 @@ namespace ImportPOC2
                 else
                 {
                     retVal.CodeValue = tokens[0];
-                    retVal.AdditionalInfo = tokens[0];
+                    retVal.AdditionalInfo = string.Empty;
                 }
             }
 
