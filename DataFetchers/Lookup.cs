@@ -20,18 +20,24 @@ namespace ImportPOC2.DataFetchers
             RadarHttpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
 
-        public static List<KeyValueLookUp> GetMatchingTradenames(string q)
+        public static List<GenericLookUp> GetMatchingTradenames(string q)
         {
-            var tradenamesList = new List<KeyValueLookUp>();
+            var temp_list = new List<KeyValueLookUp>();
+            var tradeNamesLookup = new List<GenericLookUp>();
 
             var results = RadarHttpClient.GetAsync("lookup/trade_names?q=" + q).Result;
             if (results.IsSuccessStatusCode)
             {
                 var content = results.Content.ReadAsStringAsync().Result;
-                tradenamesList = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+                temp_list = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+
+                if (temp_list != null)
+                {
+                    temp_list.ForEach(t => tradeNamesLookup.Add(new GenericLookUp { ID = t.Key, CodeValue = t.Value }));
+                }
             }
 
-            return tradenamesList;                        
+            return tradeNamesLookup;                        
         }
     }
 }

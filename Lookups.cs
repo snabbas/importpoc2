@@ -14,24 +14,18 @@ namespace ImportPOC2
         public static HttpClient RadarHttpClient;
         public static int CurrentCompanyId;
 
-        private static List<GenericLookUp> _imprintMethodsLookup = null;
-        public static List<GenericLookUp> ImprintMethodsLookup
+        private static List<SetCodeValue> _imprintMethodsLookup = null;
+        public static List<SetCodeValue> ImprintMethodsLookup
         {
             get
             {
                 if (_imprintMethodsLookup == null)
-                {
-                    _imprintMethodsLookup = new List<GenericLookUp>();
+                {                   
                     var results = RadarHttpClient.GetAsync("lookup/imprint_methods").Result;
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        var deserializedList = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);
-
-                        if (deserializedList != null)
-                        {
-                            deserializedList.ForEach(l => _imprintMethodsLookup.Add(new GenericLookUp {ID = l.ID, CodeValue = l.CodeValue }));
-                        }
+                        _imprintMethodsLookup = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);                       
                     }
                 }
                 return _imprintMethodsLookup;
@@ -398,24 +392,19 @@ namespace ImportPOC2
             set { _artworkLookup = value; }
         }
 
-        private static List<CodeValueLookUp> _personalizationLookup = null;
-        public static List<CodeValueLookUp> PersonalizationLookup
+        private static List<SetCodeValue> _personalizationLookup = null;
+        public static List<SetCodeValue> PersonalizationLookup
         {
             get
             {
                 if (_personalizationLookup == null)
                 {
-                    _personalizationLookup = new List<CodeValueLookUp>();
+                    _personalizationLookup = new List<SetCodeValue>();
                     var results = RadarHttpClient.GetAsync("lookup/personalization_methods").Result;
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        var deserializedList = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);
-
-                        if (deserializedList != null)
-                        {
-                            deserializedList.ForEach(l => _personalizationLookup.Add(new CodeValueLookUp { Code = l.ID.ToString(), Value = l.CodeValue }));
-                        }
+                        _personalizationLookup = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);                       
                     }
                 }
                 return _personalizationLookup;
@@ -441,6 +430,25 @@ namespace ImportPOC2
                 return _discountRates;
             }
             set { _discountRates = value; }
+        }
+
+        private static List<MediaCitation> _mediaCitations = null;
+        public static List<MediaCitation> MediaCitations
+        {
+            get
+            {
+                if (_mediaCitations == null)
+                {
+                    var results = RadarHttpClient.GetAsync("mediacitation?company_id=" + CurrentCompanyId).Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _mediaCitations = JsonConvert.DeserializeObject<List<MediaCitation>>(content);
+                    }
+                }
+                return _mediaCitations;
+            }
+            set { _mediaCitations = value; }
         }
     }
 }
