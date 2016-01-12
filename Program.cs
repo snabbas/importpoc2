@@ -4,7 +4,6 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
 using ImportPOC2.Processors;
 using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using Radar.Core.Models.Batch;
 using Radar.Data;
 using Radar.Models;
@@ -923,7 +922,7 @@ namespace ImportPOC2
                     }
                     else
                     {
-                        var exists = existingCsValues.Any(v => v.BaseLookupValue.ToLower() == sheetValue.ToLower());
+                        var exists = existingCsValues.Any(v => string.Equals(v.BaseLookupValue.ToString(), sheetValue, StringComparison.CurrentCultureIgnoreCase));
                         //add new value if it doesn't exists
                         if (!exists)
                         {
@@ -983,7 +982,7 @@ namespace ImportPOC2
 
                 case "IMMD":
                     //in this case, we use "Other" set code, then add it
-                    var otherImprintMethodSetCodeId = Lookups.ImprintMethodsLookup.FirstOrDefault(i => i.CodeValue == "Other");
+                    var otherImprintMethodSetCodeId = Lookups.ImprintMethodsLookup.FirstOrDefault(i => string.Equals(i.CodeValue, "Other", StringComparison.CurrentCultureIgnoreCase));
                     if (otherImprintMethodSetCodeId != null)
                         sheetValue.ID = otherImprintMethodSetCodeId.ID;
                     break;
@@ -992,7 +991,7 @@ namespace ImportPOC2
                     //sheetValue.ID == otherPersonalizationSetCodeId;
                     break;
                 case "PCKG":
-                    var customPkgScv = Lookups.PackagingLookup.FirstOrDefault(p => p.Value == "Custom");
+                    var customPkgScv = Lookups.PackagingLookup.FirstOrDefault(p => string.Equals(p.Value ,"Custom", StringComparison.CurrentCultureIgnoreCase));
                     if (customPkgScv != null)
                     {
                         createNewValue(criteriaCode, sheetValue.CodeValue, customPkgScv.Key, "CUST");
@@ -1028,137 +1027,21 @@ namespace ImportPOC2
             //add to batch error log that the specified value does not match a value in lookup
         }
 
-        private static void genericProcess(string text, string criteriaCode, IEnumerable<GenericLookUp> lookup)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
-            if (_firstRowForProduct)
-            {
-                var valueList = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-
-                valueList.ForEach(value =>
-                {
-                    var existing = lookup.FirstOrDefault(l => l.CodeValue.ToLower() == value.ToLower());
-                    if (existing != null)
-                    {
-                        var exists = existingCsvalues.Any(csv => csv.BaseLookupValue.ToLower() == value.ToLower());
-                        //add new value if it doesn't exists
-                        if (!exists)
-                        {
-                            if (existing.ID != null)
-                                createNewValue(criteriaCode, value, existing.ID.Value);
-                        }
-                    }
-                    else
-                    {
-                        //log batch error
-                        addValidationError(criteriaCode, value);
-                        _hasErrors = true;
-                    }
-                });
-
-                deleteCsValues(existingCsvalues, valueList, criteriaSet);
-            }
-        }
-
-        //TODO: I want this to be a single method that uses the same lookup type as method below
-        private static void genericProcess(string text, string criteriaCode, IEnumerable<SetCodeValue> lookup)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
-            //comma delimited list of type
-            if (_firstRowForProduct)
-            {
-                var valueList = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-
-                valueList.ForEach(item =>
-                {
-                    var exists = lookup.FirstOrDefault(l => String.Equals(l.CodeValue, item, StringComparison.CurrentCultureIgnoreCase));
-
-                    if (exists != null)
-                    {
-                        var existing = existingCsvalues.Any(csv => csv.BaseLookupValue.ToLower() == item.ToLower());
-                        //add new value if it doesn't exists
-                        if (!existing)
-                        {
-                            createNewValue(criteriaCode, item, exists.ID);
-                        }
-                    }
-                    else
-                    {
-                        //log batch error
-                        addValidationError(criteriaCode, item);
-                        _hasErrors = true;
-                    }
-                });
-
-                deleteCsValues(existingCsvalues, valueList, criteriaSet);
-            }
-        }
-        //TODO: see above, this should be same method as above. 
-        private static void genericProcess(string text, string criteriaCode, IEnumerable<KeyValueLookUp> lookup)
-        {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
-            //comma delimited list of type
-            if (_firstRowForProduct)
-            {
-                var valueList = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-
-                valueList.ForEach(item =>
-                {
-                    var exists = lookup.FirstOrDefault(l => String.Equals(l.Value, item, StringComparison.CurrentCultureIgnoreCase));
-
-                    if (exists != null)
-                    {
-                        var existing = existingCsvalues.Any(csv => csv.BaseLookupValue.ToLower() == item.ToLower());
-                        //add new value if it doesn't exists
-                        if (!existing)
-                        {
-                            createNewValue(criteriaCode, item, exists.Key);
-                        }
-                    }
-                    else
-                    {
-                        //log batch error
-                        addValidationError(criteriaCode, item);
-                        _hasErrors = true;
-                    }
-                });
-
-                deleteCsValues(existingCsvalues, valueList, criteriaSet);
-            }
-        }
-
         private static void genericProcessImprintCriteria(string text, string criteriaCode)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var valueList = text.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
                 long customSetCodeValueId = 0;
 
                 //get id for custom additional location
-                var criteriaLookUp = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => i.Code == criteriaCode);
+                var criteriaLookUp = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => string.Equals(i.Code, criteriaCode, StringComparison.CurrentCultureIgnoreCase));
 
                 if (criteriaLookUp != null)
                 {
-                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    //TODO: this lookup should not be here but in the Lookups class
+                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => string.Equals(cvg.Description, "Other", StringComparison.CurrentCultureIgnoreCase));
                     if (group != null)
                     {
                         var setCodeValue = group.SetCodeValues.FirstOrDefault();
@@ -1172,7 +1055,7 @@ namespace ImportPOC2
                 valueList.ForEach(value =>
                 {
                     //check if the value already exists
-                    var exists = existingCsvalues.Any(csv => csv.Value.ToLower() == value.ToLower());
+                    var exists = existingCsvalues.Any(csv => string.Equals(csv.Value.ToString(), value, StringComparison.CurrentCultureIgnoreCase));
                     if (!exists)
                     {
                         //add new value if it doesn't exist
@@ -1197,15 +1080,17 @@ namespace ImportPOC2
                 valueList.ForEach(value =>
                 {                    
                     var splittedValue = value.SplitValue('=');
-                    var existing = Lookups.ImprintMethodsLookup.FirstOrDefault(l => l.CodeValue.ToLower() == splittedValue.CodeValue.ToLower());
+                    var existing = Lookups.ImprintMethodsLookup.FirstOrDefault(l => String.Equals(l.CodeValue, splittedValue.CodeValue, StringComparison.CurrentCultureIgnoreCase));
                     if (existing != null)
                     {
-                        var exists = existingCsvalues.Any(csv => csv.Value == splittedValue.Alias);
+                        var exists = existingCsvalues.Any(csv => string.Equals(csv.Value.ToString(), splittedValue.Alias, StringComparison.CurrentCultureIgnoreCase));
                         //add new value if it doesn't exists
                         if (!exists)
                         {
                             createNewValue(criteriaCode, splittedValue.Alias, existing.ID);
                         }
+                        //TODO: alias is the PK, they might have changed method selection for alias, this triggers a set code value ID update
+                        //NOTE alias cannot be "updated" - an alias change triggers a delete then add of new CSV
                     }
                     else
                     {
@@ -1222,11 +1107,8 @@ namespace ImportPOC2
         //this generic method will handle the processing for product and spec samples
         private static void genericProcessSamples(string text, string criteriaCode, IEnumerable<ImprintCriteriaLookUp> lookup, string sampleType)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
             //comma separated list of values
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 //should have only one value
                 var splittedValue = text.SplitValue(':');
@@ -1243,7 +1125,7 @@ namespace ImportPOC2
                 if (splittedValue.CodeValue == Constants.BooleanFlag.TRUE)
                 {
                     //check if the sample value already exists
-                    var csValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == sampleType);
+                    var csValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => string.Equals(v.Value.ToString(), sampleType, StringComparison.CurrentCultureIgnoreCase));
                     if (csValue != null)
                     {
                         csValue.CriteriaValueDetail = splittedValue.Alias;
@@ -1257,7 +1139,7 @@ namespace ImportPOC2
                             if (group != null)
                             {
                                 //get set code value based on sampleType param; this will be "Product Sample" or "Spec Sample"
-                                var setCodeValue = group.SetCodeValues.FirstOrDefault(s => s.CodeValue == sampleType);
+                                var setCodeValue = group.SetCodeValues.FirstOrDefault(s => string.Equals(s.CodeValue, sampleType, StringComparison.CurrentCultureIgnoreCase));
                                 if (setCodeValue != null)
                                 {
                                     long smplScvId = setCodeValue.ID;
@@ -1269,7 +1151,7 @@ namespace ImportPOC2
                 }
                 else
                 {
-                    var existingValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == sampleType);
+                    var existingValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => string.Equals(v.Value.ToString(), sampleType, StringComparison.CurrentCultureIgnoreCase));
                     if (existingValue != null)
                     {
                         criteriaSet.CriteriaSetValues.Remove(existingValue);
@@ -1286,46 +1168,46 @@ namespace ImportPOC2
 
         private static void processTradenames(string text)
         {                     
-            lookupFieldProcessor_Tradenames(text, Constants.CriteriaCodes.TradeName);
-
 
             if (string.IsNullOrWhiteSpace(text))
                 return;
 
+            lookupFieldProcessor_Tradenames(text, Constants.CriteriaCodes.TradeName);
+
             //comma delimited list of trade names
-            if (_firstRowForProduct)
-            {
-                var criteriaCode = Constants.CriteriaCodes.TradeName;
-                var tradenames = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+            //if (_firstRowForProduct)
+            //{
+            //    var criteriaCode = Constants.CriteriaCodes.TradeName;
+            //    var tradenames = text.ConvertToList();
+            //    var criteriaSet = getCriteriaSetByCode(criteriaCode);
 
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+            //    var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
-                tradenames.ForEach(tradename =>
-                {
-                    var results = DataFetchers.Lookup.GetMatchingTradenames(tradename);
-                    var tradenameFound = results.FirstOrDefault();
+            //    tradenames.ForEach(tradename =>
+            //    {
+            //        var results = DataFetchers.Lookup.GetMatchingTradenames(tradename);
+            //        var tradenameFound = results.FirstOrDefault();
 
-                    if (tradenameFound != null)
-                    {
-                        var exists = existingCsvalues.Any(v => string.Equals(v.Value, tradename, StringComparison.InvariantCultureIgnoreCase));
-                        //add new value if it doesn't exists
-                        if (!exists)
-                        {
-                            if (tradenameFound.ID != null)
-                                createNewValue(criteriaCode, tradename, tradenameFound.ID.Value);
-                        }
-                    }
-                    else
-                    {
-                        //log batch error
-                        addValidationError(criteriaCode, tradename);
-                        _hasErrors = true;
-                    }
-                });
+            //        if (tradenameFound != null)
+            //        {
+            //            var exists = existingCsvalues.Any(v => string.Equals(v.Value, tradename, StringComparison.CurrentCultureIgnoreCase));
+            //            //add new value if it doesn't exists
+            //            if (!exists)
+            //            {
+            //                if (tradenameFound.ID != null)
+            //                    createNewValue(criteriaCode, tradename, tradenameFound.ID.Value);
+            //            }
+            //        }
+            //        else
+            //        {
+            //            //log batch error
+            //            addValidationError(criteriaCode, tradename);
+            //            _hasErrors = true;
+            //        }
+            //    });
 
-                deleteCsValues(existingCsvalues, tradenames, criteriaSet);
-            }
+            //    deleteCsValues(existingCsvalues, tradenames, criteriaSet);
+            //}
         }
 
         private static void processOrigins(string text)
@@ -1335,7 +1217,7 @@ namespace ImportPOC2
 
         private static void processShippingItems(string text)
         {
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var shippingItems = text.Split(':');
                 if (shippingItems.Length == 2)
@@ -1346,7 +1228,7 @@ namespace ImportPOC2
                     var items = shippingItems[0];
                     var unit = shippingItems[1];
                     var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Unit");
-                    var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.DisplayName == unit);
+                    var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => string.Equals(u.DisplayName, unit, StringComparison.CurrentCultureIgnoreCase));
 
                     if (unitFound != null)
                     {
@@ -1392,10 +1274,10 @@ namespace ImportPOC2
 
         private static void processShippingDimensions(string text)
         {
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var criteriaCode = "SDIM";              
-                var dimensionTypes = new string[] { "Length", "Width", "Height" };
+                var dimensionTypes = new [] { "Length", "Width", "Height" };
                 var shippingDimensions = text.Split(';');
 
                 for (var i = 0; i < shippingDimensions.Length; i++)
@@ -1420,7 +1302,7 @@ namespace ImportPOC2
                     var unit = dimensionValues.Alias;
 
                     var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, dimentionType);
-                    var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == unit);
+                    var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => string.Equals(u.Format, unit, StringComparison.CurrentCultureIgnoreCase));
                     if (unitFound != null)
                     {
                         var value = new 
@@ -1477,7 +1359,7 @@ namespace ImportPOC2
 
         private static void processShippingWeight(string text)
         {
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 processDimension("SHWT", "Unit", text);
             }
@@ -1557,7 +1439,8 @@ namespace ImportPOC2
                     var valueToMatch = size + "|" + location;     
           
                     modelValues.Add(valueToMatch);
-                    var exists = existingCsvalues.Any(csv => csv.Equals(valueToMatch));
+                    //TODO: check that this works with all forms of imprint size/location (i.e., "s1|l1", "s1", "|l1", empty, etc.)
+                    var exists = existingCsvalues.Any(csv => string.Equals(csv.Value.ToString(), valueToMatch, StringComparison.CurrentCultureIgnoreCase));
 
                     if (!exists)
                     {
@@ -1599,11 +1482,8 @@ namespace ImportPOC2
 
         private static void processImprintColors(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
             //comma delimited list of imprint colors
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var criteriaCode = Constants.CriteriaCodes.ImprintColor;
                 var imprintColors = text.ConvertToList();
@@ -1616,7 +1496,7 @@ namespace ImportPOC2
 
                 if (imcl != null)
                 {
-                    var group = imcl.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    var group = imcl.CodeValueGroups.FirstOrDefault(cvg => string.Equals(cvg.Description, "Other", StringComparison.CurrentCultureIgnoreCase));
 
                     if (group != null)
                     {
@@ -1631,7 +1511,7 @@ namespace ImportPOC2
                 imprintColors.ForEach(color =>
                 {
                     //check if the value already exists
-                    var exists = existingCsvalues.Any(v => v.Value.ToLower() == color.ToLower());
+                    var exists = existingCsvalues.Any(v => string.Equals(v.Value.ToString(), color, StringComparison.CurrentCultureIgnoreCase));
                     if (!exists)
                     {
                         //add new value if it doesn't exists                        
@@ -1645,10 +1525,7 @@ namespace ImportPOC2
 
         private static void processSoldUnimprinted(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 //should be Y/N
                 var soldUnimprinted = text;
@@ -1662,7 +1539,7 @@ namespace ImportPOC2
                 long soldUnimprintedScvId = 0;
 
                 //get set code value id for sold unimprinted
-                var unimprinted = Lookups.ImprintMethodsLookup.FirstOrDefault(i => i.CodeValue == "Unimprinted");
+                var unimprinted = Lookups.ImprintMethodsLookup.FirstOrDefault(i => string.Equals(i.CodeValue, "Unimprinted", StringComparison.CurrentCultureIgnoreCase));
 
                 if (unimprinted != null)
                 {                   
@@ -1706,9 +1583,9 @@ namespace ImportPOC2
                 var valueList = text.ConvertToList();               
                 var criteriaCode = Constants.CriteriaCodes.Artwork;
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();  
-                var otherArtworkScValue = Lookups.ArtworkLookup.FirstOrDefault(a => a.CodeValue == "Other");
-                List<FieldInfo> modelValues = new List<FieldInfo>();
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                var otherArtworkScValue = Lookups.ArtworkLookup.FirstOrDefault(a => string.Equals(a.CodeValue, "Other", StringComparison.CurrentCultureIgnoreCase));
+                var modelValues = new List<FieldInfo>();
                 long otherArtworkScValueId = 0;
 
                 if (otherArtworkScValue != null)
@@ -1789,7 +1666,7 @@ namespace ImportPOC2
 
         private static void processProductionTime(string text)
         {
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var criteriaCode = Constants.CriteriaCodes.ProductionTime;
                 var productionTimes = new List<FieldInfo>();
@@ -1798,11 +1675,11 @@ namespace ImportPOC2
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
                 var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                 var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Unit");
-                var criteriaLookUp = Lookups.ProductionTimeCriteriaLookup.FirstOrDefault(i => i.Code == criteriaCode);
+                var criteriaLookUp = Lookups.ProductionTimeCriteriaLookup.FirstOrDefault(i => string.Equals(i.Code, criteriaCode, StringComparison.CurrentCultureIgnoreCase));
 
                 if (criteriaLookUp != null)
                 {
-                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => string.Equals(cvg.Description, "Other", StringComparison.CurrentCultureIgnoreCase));
                     if (group != null)
                     {
                         var setCodeValue = group.SetCodeValues.FirstOrDefault();
@@ -1824,7 +1701,9 @@ namespace ImportPOC2
                         comment = productionTime.Alias;
                     }
 
-                    var exists = existingCsvalues.FirstOrDefault(v => !(v.Value is string) && v.Value != null && v.Value.First.UnitValue == time && v.CriteriaValueDetail == comment);
+                    //TODO: the "PK" here is the time value, not the comment. by default we don't allow the same time posted twice regardless of comment existence
+                    //TODO: also what happens when comment is specified but time is empty - in the DB? 
+                    var exists = existingCsvalues.FirstOrDefault(v => !(v.Value is string) && v.Value != null && v.Value.First.UnitValue == time);// && v.CriteriaValueDetail == comment);
                     //add new value if it doesn't exists
                     if (exists == null)
                     {
@@ -1845,11 +1724,8 @@ namespace ImportPOC2
 
         private static void processRushService(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
             //comma separated list of values
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var criteriaCode = Constants.CriteriaCodes.RushService;
                 var valueField = "Rush Service";
@@ -1870,7 +1746,7 @@ namespace ImportPOC2
                     //check if the rush service value already exists
                     if (criteriaSet.CriteriaSetValues.Count() == 1)
                     {
-                        var csValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => (v.Value is string) && v.Value == valueField);
+                        var csValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => (v.Value is string) && string.Equals(v.Value.ToString(), valueField, StringComparison.CurrentCultureIgnoreCase));
                         if (csValue != null)
                         {
                             csValue.CriteriaValueDetail = splittedValue.Alias;
@@ -1885,7 +1761,7 @@ namespace ImportPOC2
                             var group = criteria.CodeValueGroups.FirstOrDefault();
                             if (group != null)
                             {
-                                var setCodeValue = group.SetCodeValues.FirstOrDefault(s => s.CodeValue == "Other");
+                                var setCodeValue = group.SetCodeValues.FirstOrDefault(s => string.Equals(s.CodeValue, "Other", StringComparison.CurrentCultureIgnoreCase));
                                 if (setCodeValue != null)
                                 {
                                     long scvId = setCodeValue.ID;
@@ -1897,7 +1773,7 @@ namespace ImportPOC2
                 }
                 else
                 {
-                    var existingValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == valueField);
+                    var existingValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => string.Equals(v.Value.ToString(), valueField, StringComparison.CurrentCultureIgnoreCase));
                     if (existingValue != null)
                     {
                         criteriaSet.CriteriaSetValues.Remove(existingValue);
@@ -1908,7 +1784,7 @@ namespace ImportPOC2
 
         private static void processRushTime(string text)
         {
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var criteriaCode = Constants.CriteriaCodes.RushService;
                 var rushTimes = new List<FieldInfo>();
@@ -1921,7 +1797,7 @@ namespace ImportPOC2
 
                 if (criteriaLookUp != null)
                 {
-                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => cvg.Description == "Other");
+                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => string.Equals(cvg.Description, "Other", StringComparison.CurrentCultureIgnoreCase));
                     if (group != null)
                     {
                         var setCodeValue = group.SetCodeValues.FirstOrDefault();
@@ -1955,6 +1831,7 @@ namespace ImportPOC2
                     }
                     else
                     {
+                        //TODO: comments cannot be our PK here... 
                         var values = criteriaSet.CriteriaSetValues.Where(v => v.CriteriaValueDetail == comment).Select(l => l.Value);
                         var exists = values.FirstOrDefault(v => !(v is string) && v.UnitValue == days);
                         //add new value if it doesn't exists
@@ -1978,11 +1855,8 @@ namespace ImportPOC2
 
         private static void processSameDay(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
             //comma separated list of values
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var criteriaCode = "SDRU";
                 var valueField = "Same Day Service";
@@ -2001,7 +1875,7 @@ namespace ImportPOC2
                 if (splittedValue.CodeValue == Constants.BooleanFlag.TRUE)
                 {
                     //check if the sample value already exists
-                    var csValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == valueField);
+                    var csValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => string.Equals(v.Value, valueField, StringComparison.CurrentCultureIgnoreCase));
                     if (csValue != null)
                     {
                         csValue.CriteriaValueDetail = splittedValue.Alias;
@@ -2014,8 +1888,8 @@ namespace ImportPOC2
                         {
                             var group = criteria.CodeValueGroups.FirstOrDefault();
                             if (group != null)
-                            {                              
-                                var setCodeValue = group.SetCodeValues.FirstOrDefault(s => s.CodeValue == "Other");
+                            {
+                                var setCodeValue = group.SetCodeValues.FirstOrDefault(s => string.Equals(s.CodeValue, "Other", StringComparison.CurrentCultureIgnoreCase));
                                 if (setCodeValue != null)
                                 {
                                     long smplScvId = setCodeValue.ID;
@@ -2027,7 +1901,7 @@ namespace ImportPOC2
                 }
                 else
                 {
-                    var existingValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == valueField);
+                    var existingValue = criteriaSet.CriteriaSetValues.FirstOrDefault(v => string.Equals(v.Value.ToString(), valueField, StringComparison.CurrentCultureIgnoreCase));
                     if (existingValue != null)
                     {
                         criteriaSet.CriteriaSetValues.Remove(existingValue);
@@ -2038,7 +1912,7 @@ namespace ImportPOC2
 
         private static void processSafetyWarnings(string text)
         {
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var safetyWarnings = text.ConvertToList();
 
@@ -2048,10 +1922,10 @@ namespace ImportPOC2
                 safetyWarnings.ForEach(curSafetyWarning =>
                 {
                     //need to lookup safetyWarnings
-                    var safetyWarning = Lookups.SafetywarningsLookup.FirstOrDefault(c => c.Value == curSafetyWarning);
+                    var safetyWarning = Lookups.SafetywarningsLookup.FirstOrDefault(c => string.Equals(c.Value, curSafetyWarning, StringComparison.CurrentCultureIgnoreCase));
                     if (safetyWarning != null)
                     {
-                        var existing = _currentProduct.SelectedSafetyWarnings.FirstOrDefault(c => c.Description == safetyWarning.Value);
+                        var existing = _currentProduct.SelectedSafetyWarnings.FirstOrDefault(c => string.Equals(c.Description, safetyWarning.Value, StringComparison.CurrentCultureIgnoreCase));
                         if (existing == null)
                         {
                             var newSafetyWarning = new SafetyWarning { Code = safetyWarning.Key, WarningText = safetyWarning.Value };
@@ -2073,7 +1947,7 @@ namespace ImportPOC2
 
         private static void processComplianceCertifications(string text)
         {
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var complianceCertifications = text.ConvertToList();
 
@@ -2083,10 +1957,10 @@ namespace ImportPOC2
                 complianceCertifications.ForEach(curCert =>
                 {
                     //need to lookup complianceCertifications
-                    var complianceCert = Lookups.ComplianceLookup.FirstOrDefault(c => c.Value == curCert);
+                    var complianceCert = Lookups.ComplianceLookup.FirstOrDefault(c => string.Equals(c.Value, curCert, StringComparison.CurrentCultureIgnoreCase));
                     if (complianceCert != null)
                     {
-                        var existing = _currentProduct.SelectedComplianceCerts.FirstOrDefault(c => c.Description == complianceCert.Value);
+                        var existing = _currentProduct.SelectedComplianceCerts.FirstOrDefault(c => string.Equals(c.Description, complianceCert.Value, StringComparison.CurrentCultureIgnoreCase));
                         if (existing == null)
                         {
                             var newComplianceCert = new ProductComplianceCert { ComplianceCertId = Convert.ToInt32(complianceCert.Key), Description = complianceCert.Value };
@@ -2108,18 +1982,15 @@ namespace ImportPOC2
 
         private static void processLineNames(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
             //comma delimited list of line names
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var linenames = text.ConvertToList();
                 var existingLinenames = _currentProduct.SelectedLineNames;
 
                 linenames.ForEach(linename =>
                 {
-                    var linenameFound = Lookups.LinenamesLookup.FirstOrDefault(l => l.Name == linename);
+                    var linenameFound = Lookups.LinenamesLookup.FirstOrDefault(l => string.Equals(l.Name, linename, StringComparison.CurrentCultureIgnoreCase));
                     if (linenameFound != null)
                     {
                         //check if the line name is already associated with the product
@@ -2139,11 +2010,11 @@ namespace ImportPOC2
                 });
 
                 //delete line names that are missing from the list in the file
-                var lineneamesToDelete = existingLinenames.Select(e => e.Name).Except(linenames).Select(s => s).ToList();
+                var lineNamesToDelete = existingLinenames.Select(e => e.Name).Except(linenames).Select(s => s).ToList();
 
-                lineneamesToDelete.ForEach(l =>
+                lineNamesToDelete.ForEach(l =>
                 {
-                    var toDelete = _currentProduct.SelectedLineNames.FirstOrDefault(v => v.Name == l);
+                    var toDelete = _currentProduct.SelectedLineNames.FirstOrDefault(v => string.Equals(v.Name, l, StringComparison.CurrentCultureIgnoreCase));
                     _currentProduct.SelectedLineNames.Remove(toDelete);
                 });
             }
@@ -2188,18 +2059,28 @@ namespace ImportPOC2
                                     _currentProduct.ProductMediaCitations.Clear();
 
                                 //create new media citation and add it to the current product's collection
-                                var newProductMediaCitation = new ProductMediaCitation();
-                                newProductMediaCitation.ProductId = _currentProduct.ID;
-                                newProductMediaCitation.Description = foundMediaCitation.Name;
-                                newProductMediaCitation.MediaCitationId = foundMediaCitation.ID;
+                                var newProductMediaCitation = new ProductMediaCitation
+                                {
+                                    ProductId = _currentProduct.ID, 
+                                    Description = foundMediaCitation.Name, 
+                                    MediaCitationId = foundMediaCitation.ID
+                                };
 
-                                var newProductMediaCitationReference = new ProductMediaCitationReference();
-                                newProductMediaCitationReference.MediaCitationReference = new MediaCitationReference();
-                                newProductMediaCitationReference.MediaCitationReference.Number = splittedCat.Length == 3 ? splittedCat[2] : string.Empty;
-                                newProductMediaCitationReference.MediaCitationId = foundMediaCitation.ID;
+                                var newProductMediaCitationReference = new ProductMediaCitationReference
+                                {
+                                    MediaCitationId = foundMediaCitation.ID, 
+                                    MediaCitationReference = new MediaCitationReference
+                                    {
+                                        Number = splittedCat.Length == 3 ? splittedCat[2] : string.Empty
+                                    }
+                                };
 
-                                newProductMediaCitation.ProductMediaCitationReferences = new List<ProductMediaCitationReference>();
-                                newProductMediaCitation.ProductMediaCitationReferences.Add(newProductMediaCitationReference);
+                                newProductMediaCitation.ProductMediaCitationReferences = new List<ProductMediaCitationReference>
+                                {
+                                    newProductMediaCitationReference
+                                };
+
+
                                 _currentProduct.ProductMediaCitations.Add(newProductMediaCitation);
                             }
                         }
@@ -2216,7 +2097,7 @@ namespace ImportPOC2
         private static void processProductColors(string text)
         {
             //colors are comma delimited 
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var colorList = text.ConvertToList();
                 colorList.ForEach(c =>
@@ -2238,7 +2119,7 @@ namespace ImportPOC2
                     }
                     // if colorname isn't recognized, then it gets "UNCLASSIFIED/other" grouping
                     var productColors = getCriteriaSetValuesByCode("PRCL");
-                    var colorObj = Lookups.ColorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => String.Equals(g.Description, colorName, StringComparison.CurrentCultureIgnoreCase));
+                    var colorObj = Lookups.ColorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => string.Equals(g.Description, colorName, StringComparison.CurrentCultureIgnoreCase));
                     var existing = productColors.FirstOrDefault(p => p.Value == aliasName);
 
                     long setCodeId = 0;
@@ -2318,7 +2199,7 @@ namespace ImportPOC2
             if (prodConfig != null)
             {
                 var cSets = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
-                retVal = !string.IsNullOrWhiteSpace(optionName) ? cSets.FirstOrDefault(c => c.CriteriaDetail == optionName) : cSets.FirstOrDefault();
+                retVal = !string.IsNullOrWhiteSpace(optionName) ? cSets.FirstOrDefault(c =>  string.Equals(c.CriteriaDetail , optionName, StringComparison.CurrentCultureIgnoreCase)) : cSets.FirstOrDefault();
             }
 
             retVal = retVal ?? addCriteriaSet(criteriaCode, optionName);
@@ -2399,7 +2280,7 @@ namespace ImportPOC2
                 pageNumber = catalogInfo[2];
             }
 
-            var mediaCitation = Lookups.MediaCitations.FirstOrDefault(m => m.Name == name && m.Year == year);
+            var mediaCitation = Lookups.MediaCitations.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.CurrentCultureIgnoreCase) && m.Year == year);
             if (mediaCitation != null)
             {
                 if (pageNumber != string.Empty)
@@ -2444,15 +2325,15 @@ namespace ImportPOC2
                         case "UnitValue":
                             if (e.Value is string)
                             {
-                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value, StringComparison.InvariantCultureIgnoreCase));
+                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value, StringComparison.CurrentCultureIgnoreCase));
                             }
                             else if (e.Value is IList)
                             {
-                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value.First.UnitValue.ToString(), StringComparison.InvariantCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
+                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value.First.UnitValue.ToString(), StringComparison.CurrentCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
                             }
                             else
                             {
-                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value.UnitValue.ToString(), StringComparison.InvariantCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
+                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value.UnitValue.ToString(), StringComparison.CurrentCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
                             }
                             break;
                         default:
@@ -2488,7 +2369,7 @@ namespace ImportPOC2
             // we "send" the product to Radar for processing. 
             if (_currentProduct != null && !_hasErrors)
             {
-                _priceProcessor.Finalize();
+                _priceProcessor.FinalizeProductPricing();
                 //TODO: other repeatable sets will "finalize" here as well. 
 
                 //var x = _currentProduct;

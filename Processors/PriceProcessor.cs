@@ -139,6 +139,7 @@ namespace ImportPOC2.Processors
 
         private void fillUpchargePricesFromSheet(ICollection<Price> collection, ProductRow sheetRow)
         {
+            //test  
 
         }
 
@@ -160,7 +161,7 @@ namespace ImportPOC2.Processors
         /// this will perform final pricing actions, such as removing price grids from the product that 
         /// were not specified in the sheet.
         /// </summary>
-        public void Finalize()
+        public void FinalizeProductPricing()
         {
             //compare price grid map to current product price grid list
             int x = 0;

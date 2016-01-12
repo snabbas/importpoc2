@@ -1,14 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Collections.ObjectModel;
-using ImportPOC2.Models;
-using Radar.Models.Product;
-using Radar.Models;
-using ImportPOC2.Utils;
+﻿using ImportPOC2.Models;
 using Radar.Core.Models.Batch;
+using Radar.Models;
+using Radar.Models.Product;
+using System.Collections.ObjectModel;
+using System.Linq;
 
 namespace ImportPOC2.Processors
 {
@@ -75,7 +70,7 @@ namespace ImportPOC2.Processors
                 {
                     text = "List";
                 }
-
+                //TODO: not currently working... it must be set based upon this lookup or an error must be logged. 
                 var priceTypeFound = Lookups.CostTypesLookup.FirstOrDefault(t => t.Code == text);
 
                 if (priceTypeFound != null)
@@ -129,6 +124,7 @@ namespace ImportPOC2.Processors
         {
             if (_firstRowForProduct)
             {
+                //TODO: blank text is allowed as a value but should not be validated against lookup
                 var inventoryStatusFound = Lookups.InventoryStatusesLookup.FirstOrDefault(t => t.Value == text);
                 if (inventoryStatusFound != null)
                 {
@@ -158,7 +154,7 @@ namespace ImportPOC2.Processors
 
         private void processDistributorOnlyViewFlag(string text)
         {
-            //throw new NotImplementedException();
+            //TODO: implement
         }
 
         private void processDistributorOnlyComment(string text)
@@ -261,7 +257,8 @@ namespace ImportPOC2.Processors
             if (_firstRowForProduct)
             {
                 //text here should be a list of comma sepearated URLs, in order of display
-                var urls = text.ConvertToList();
+                //var urls = text.ConvertToList(); 
+                var urls = text.Split(',').ToList();
 
                 var curUrlCount = 1;
                 urls.ForEach(currentUrl =>
@@ -283,6 +280,9 @@ namespace ImportPOC2.Processors
                         }
                     }
                 });
+
+                //todo: delete?
+
             }
         }
 
@@ -318,7 +318,7 @@ namespace ImportPOC2.Processors
             if (_firstRowForProduct)
                 _currentProduct.AsiProdNo = BasicFieldProcessor.UpdateField(text, _currentProduct.AsiProdNo);
         }
-
+        //NOTE: LMIN flag is all that is needed; criteria set value existence is handled by Radar 
         private void processLessThanMinimum(string text)
         {
             if (_firstRowForProduct)
@@ -343,6 +343,10 @@ namespace ImportPOC2.Processors
             {
                 if(!string.IsNullOrWhiteSpace(text))
                 {
+                    //TODO: this is incorrect - we have a lookup that is used for this field. 
+                    //TODO: see api/api/lookup/shipper_bills_by
+                    //TODO: remove the data you can specify "NULL" like other string fields, this code does not handle
+
                     var code = string.Empty;
                     bool sizeOfPackage =  text.ToLower().Contains("size");
                     bool weightOfPackage = text.ToLower().Contains("weight");
