@@ -43,13 +43,13 @@ namespace ImportPOC2
         private static HttpClient _radarHttpClient;
         private static Product _currentProduct;
         private static bool _firstRowForProduct = true;
-        private static int _globalUniqueId = 0;
         private static bool _publishCurrentProduct = true;
 
         private static log4net.ILog _log;
         private static bool _hasErrors = false;
         private static ProductRow _curProdRow;
         private static PriceProcessor _priceProcessor;
+        private static CriteriaProcessor _criteriaProcessor;
 
         static void Main(string[] args)
         {
@@ -814,7 +814,8 @@ namespace ImportPOC2
                 _currentProduct = getProductByXid() ?? new Product { CompanyId = _companyId };
                 _firstRowForProduct = true;
                 _hasErrors = false;
-                _priceProcessor = new PriceProcessor();
+                _criteriaProcessor = new CriteriaProcessor(_currentProduct);
+                _priceProcessor = new PriceProcessor(_criteriaProcessor);
             }
         }
 
@@ -868,7 +869,7 @@ namespace ImportPOC2
             {
                 //split the values, if it's csv 
                 var sheetValueList = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 var existingCsValues = criteriaSet.CriteriaSetValues.ToList();
 
                 var sheetCodeValuesToValidate = parseByCriteriaCode(criteriaCode, sheetValueList);
@@ -888,7 +889,7 @@ namespace ImportPOC2
                         if (existing == null)
                         {
                             //create it
-                            createNewValue(criteriaCode, sheetValue.CodeValue, sheetValue.ID.Value);
+                            _criteriaProcessor.CreateNewValue(criteriaCode, sheetValue.CodeValue, sheetValue.ID.Value);
                         }
                         else
                         {
@@ -898,7 +899,7 @@ namespace ImportPOC2
                     }
                 });
 
-                deleteCsValues(existingCsValues, sheetValueList, criteriaSet);
+                _criteriaProcessor.DeleteCsValues(existingCsValues, sheetValueList, criteriaSet);
             }
         }
 
@@ -908,7 +909,7 @@ namespace ImportPOC2
             {
                 //split the values, if it's csv 
                 var sheetValueList = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 var existingCsValues = criteriaSet.CriteriaSetValues.ToList();                
 
                 sheetValueList.ForEach(sheetValue =>
@@ -927,12 +928,12 @@ namespace ImportPOC2
                         if (!exists)
                         {
                             if (tradenameFound.ID != null)
-                                createNewValue(criteriaCode, sheetValue, tradenameFound.ID.Value);
+                                _criteriaProcessor.CreateNewValue(criteriaCode, sheetValue, tradenameFound.ID.Value);
                         }
                     }                                                              
                 });
 
-                deleteCsValues(existingCsValues, sheetValueList, criteriaSet);
+                _criteriaProcessor.DeleteCsValues(existingCsValues, sheetValueList, criteriaSet);
             }
         }
 
@@ -994,7 +995,7 @@ namespace ImportPOC2
                     var customPkgScv = Lookups.PackagingLookup.FirstOrDefault(p => string.Equals(p.Value ,"Custom", StringComparison.CurrentCultureIgnoreCase));
                     if (customPkgScv != null)
                     {
-                        createNewValue(criteriaCode, sheetValue.CodeValue, customPkgScv.Key, "CUST");
+                        _criteriaProcessor.CreateNewValue(criteriaCode, sheetValue.CodeValue, customPkgScv.Key, "CUST");
                     }
                     break;
                 case "PRCL":
@@ -1032,7 +1033,7 @@ namespace ImportPOC2
             if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var valueList = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 long customSetCodeValueId = 0;
 
                 //get id for custom additional location
@@ -1059,11 +1060,11 @@ namespace ImportPOC2
                     if (!exists)
                     {
                         //add new value if it doesn't exist
-                        createNewValue(criteriaCode, value, customSetCodeValueId, "CUST");
+                        _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST");
                     }
                 });
 
-                deleteCsValues(existingCsvalues, valueList, criteriaSet);
+                _criteriaProcessor.DeleteCsValues(existingCsvalues, valueList, criteriaSet);
             }
         }
 
@@ -1074,7 +1075,7 @@ namespace ImportPOC2
             if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 var valueList = text.ConvertToList();                
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
                 valueList.ForEach(value =>
@@ -1087,7 +1088,7 @@ namespace ImportPOC2
                         //add new value if it doesn't exists
                         if (!exists)
                         {
-                            createNewValue(criteriaCode, splittedValue.Alias, existing.ID);
+                            _criteriaProcessor.CreateNewValue(criteriaCode, splittedValue.Alias, existing.ID);
                         }
                         //TODO: alias is the PK, they might have changed method selection for alias, this triggers a set code value ID update
                         //NOTE alias cannot be "updated" - an alias change triggers a delete then add of new CSV
@@ -1100,7 +1101,7 @@ namespace ImportPOC2
                     }
                 });
 
-                deleteCsValues(existingCsvalues, valueList, criteriaSet);
+                _criteriaProcessor.DeleteCsValues(existingCsvalues, valueList, criteriaSet);
             }
         }
 
@@ -1120,7 +1121,7 @@ namespace ImportPOC2
                     return;
                 }
 
-                var criteriaSet = getCriteriaSetByCode("SMPL");
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode("SMPL");
 
                 if (splittedValue.CodeValue == Constants.BooleanFlag.TRUE)
                 {
@@ -1143,7 +1144,7 @@ namespace ImportPOC2
                                 if (setCodeValue != null)
                                 {
                                     long smplScvId = setCodeValue.ID;
-                                    createNewValue("SMPL", sampleType, smplScvId);
+                                    _criteriaProcessor.CreateNewValue("SMPL", sampleType, smplScvId);
                                 }
                             }
                         }
@@ -1179,7 +1180,7 @@ namespace ImportPOC2
             //{
             //    var criteriaCode = Constants.CriteriaCodes.TradeName;
             //    var tradenames = text.ConvertToList();
-            //    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+            //    var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
 
             //    var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
@@ -1195,7 +1196,7 @@ namespace ImportPOC2
             //            if (!exists)
             //            {
             //                if (tradenameFound.ID != null)
-            //                    createNewValue(criteriaCode, tradename, tradenameFound.ID.Value);
+            //                    _criteriaProcessor.CreateNewValue(criteriaCode, tradename, tradenameFound.ID.Value);
             //            }
             //        }
             //        else
@@ -1206,7 +1207,7 @@ namespace ImportPOC2
             //        }
             //    });
 
-            //    deleteCsValues(existingCsvalues, tradenames, criteriaSet);
+            //    _criteriaProcessor.DeleteCsValues(existingCsvalues, tradenames, criteriaSet);
             //}
         }
 
@@ -1223,7 +1224,7 @@ namespace ImportPOC2
                 if (shippingItems.Length == 2)
                 {
                     var criteriaCode = "SHES";
-                    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                    var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                     var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                     var items = shippingItems[0];
                     var unit = shippingItems[1];
@@ -1259,7 +1260,7 @@ namespace ImportPOC2
                                     setCodeValueId = setCodeValue.ID;
                             }
 
-                            createNewValue(criteriaCode, value, setCodeValueId, "CUST");
+                            _criteriaProcessor.CreateNewValue(criteriaCode, value, setCodeValueId, "CUST");
                         }
                     }
                     else
@@ -1295,7 +1296,7 @@ namespace ImportPOC2
 
                 if (dimensionValues.CodeValue != dimensionValues.Alias)
                 {
-                    var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                    var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                     var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
                     var dimension = dimensionValues.CodeValue;
@@ -1324,7 +1325,7 @@ namespace ImportPOC2
                                     setCodeValueId = setCodeValue.ID;
                             }
                             var valueList = new List<dynamic> { value };
-                            createNewValue(criteriaCode, valueList, setCodeValueId, "CUST");
+                            _criteriaProcessor.CreateNewValue(criteriaCode, valueList, setCodeValueId, "CUST");
                         }
                         else
                         {
@@ -1382,7 +1383,7 @@ namespace ImportPOC2
                 var criteriaCode = Constants.CriteriaCodes.ImprintSizeLocation;
                 var imprintSizes = imprintSizeText.ConvertToList();
                 var imprintLocations = imprintLocationText.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                 var modelValues = new List<string>();
 
@@ -1444,11 +1445,11 @@ namespace ImportPOC2
 
                     if (!exists)
                     {
-                        createNewValue(criteriaCode, valueToMatch, customImprintSizeLocationScvId, "CUST");                            
+                        _criteriaProcessor.CreateNewValue(criteriaCode, valueToMatch, customImprintSizeLocationScvId, "CUST");                            
                     }
                 });
 
-                deleteCsValues(existingCsvalues, modelValues, criteriaSet);                                              
+                _criteriaProcessor.DeleteCsValues(existingCsvalues, modelValues, criteriaSet);                                              
             }           
         }
 
@@ -1468,7 +1469,7 @@ namespace ImportPOC2
                 return;
 
             genericProcessImprintMethods(text, "PERS", Lookups.PersonalizationLookup);
-            var pers = getCriteriaSetByCode("PERS");
+            var pers = _criteriaProcessor.GetCriteriaSetByCode("PERS");
 
             if (pers != null && pers.CriteriaSetValues.Any())
             {
@@ -1487,7 +1488,7 @@ namespace ImportPOC2
             {
                 var criteriaCode = Constants.CriteriaCodes.ImprintColor;
                 var imprintColors = text.ConvertToList();
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
 
                 long imprintColorScvId = 0;
 
@@ -1515,11 +1516,11 @@ namespace ImportPOC2
                     if (!exists)
                     {
                         //add new value if it doesn't exists                        
-                        createNewValue(criteriaCode, color, imprintColorScvId, "CUST");
+                        _criteriaProcessor.CreateNewValue(criteriaCode, color, imprintColorScvId, "CUST");
                     }
                 });
 
-                deleteCsValues(existingCsvalues, imprintColors, criteriaSet);
+                _criteriaProcessor.DeleteCsValues(existingCsvalues, imprintColors, criteriaSet);
             }
         }
 
@@ -1547,7 +1548,7 @@ namespace ImportPOC2
                 }
 
                 var criteriaCode = Constants.CriteriaCodes.ImprintMethod;
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 CriteriaSetValue unimprintedCsvalue = null;
 
                 if (criteriaSet != null)
@@ -1560,7 +1561,7 @@ namespace ImportPOC2
                     //create new value for unimprinted if it doesn't exists
                     if (unimprintedCsvalue == null)
                     {
-                        createNewValue(criteriaCode, "Unimprinted", soldUnimprintedScvId);
+                        _criteriaProcessor.CreateNewValue(criteriaCode, "Unimprinted", soldUnimprintedScvId);
                     }
                     _currentProduct.IsAvailableUnimprinted = true;
                 }
@@ -1582,7 +1583,7 @@ namespace ImportPOC2
             {
                 var valueList = text.ConvertToList();               
                 var criteriaCode = Constants.CriteriaCodes.Artwork;
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                 var otherArtworkScValue = Lookups.ArtworkLookup.FirstOrDefault(a => string.Equals(a.CodeValue, "Other", StringComparison.CurrentCultureIgnoreCase));
                 var modelValues = new List<FieldInfo>();
@@ -1606,12 +1607,12 @@ namespace ImportPOC2
                         if (exists.ID != otherArtworkScValueId)
                         {
                             if (exists.ID != null)
-                                existingCsValue = getCsValueBySetCodeValueId(exists.ID.Value, criteriaSet.CriteriaSetValues);
+                                existingCsValue = getCsValueBySetCodeValueId(exists.ID.Value, existingCsvalues);
                         }
                         else
                         {
-                            if (exists.ID != null)
-                                existingCsValue = findCriteriaValue(exists.ID.Value, criteriaSet, splittedValue.Alias);
+                            if (exists.ID != null)//TODO: does this make sense, same as previous test?
+                                existingCsValue = getCsValueByAlias(exists.ID.Value, existingCsvalues, splittedValue.Alias);
                         }
 
                         //add new value if it doesn't exists
@@ -1619,7 +1620,7 @@ namespace ImportPOC2
                         {
                             var value = exists.ID != null && exists.ID.Value != otherArtworkScValueId ? splittedValue.CodeValue : splittedValue.Alias;
                             if (exists.ID != null)
-                                createNewValue(criteriaCode, value, exists.ID.Value, "CUST", splittedValue.Alias);
+                                _criteriaProcessor.CreateNewValue(criteriaCode, value, exists.ID.Value, "CUST", splittedValue.Alias);
                         }
                         else
                         {
@@ -1672,7 +1673,7 @@ namespace ImportPOC2
                 var productionTimes = new List<FieldInfo>();
                 var productionTimesTokens = text.ConvertToList();
                 long customSetCodeValueId = 0;
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                 var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Unit");
                 var criteriaLookUp = Lookups.ProductionTimeCriteriaLookup.FirstOrDefault(i => string.Equals(i.Code, criteriaCode, StringComparison.CurrentCultureIgnoreCase));
@@ -1714,11 +1715,11 @@ namespace ImportPOC2
                             UnitOfMeasureCode = "BUSI"
                         };
 
-                        createNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment);
+                        _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment);
                     }
                 });
 
-                deleteCsValues(existingCsvalues, productionTimes, criteriaSet, "UnitValue");
+                _criteriaProcessor.DeleteCsValues(existingCsvalues, productionTimes, criteriaSet, "UnitValue");
             }
         }
 
@@ -1739,7 +1740,7 @@ namespace ImportPOC2
                     return;
                 }
 
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
 
                 if (splittedValue.CodeValue == Constants.BooleanFlag.TRUE)
                 {
@@ -1765,7 +1766,7 @@ namespace ImportPOC2
                                 if (setCodeValue != null)
                                 {
                                     long scvId = setCodeValue.ID;
-                                    createNewValue(criteriaCode, valueField, scvId, "CUST", valueField);
+                                    _criteriaProcessor.CreateNewValue(criteriaCode, valueField, scvId, "CUST", valueField);
                                 }
                             }
                         }
@@ -1790,7 +1791,7 @@ namespace ImportPOC2
                 var rushTimes = new List<FieldInfo>();
                 var rushTimesTokens = text.ConvertToList();
                 long customSetCodeValueId = 0;
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
                 var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Unit");
                 var criteriaLookUp = Lookups.ProductionTimeCriteriaLookup.FirstOrDefault(i => i.Code == criteriaCode);
@@ -1844,12 +1845,12 @@ namespace ImportPOC2
                                 UnitOfMeasureCode = "BUSI"
                             };
 
-                            createNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment);
+                            _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment);
                         }
                     }
                 });
               
-                deleteCsValues(criteriaSet.CriteriaSetValues, rushTimes, criteriaSet, "UnitValue");
+                _criteriaProcessor.DeleteCsValues(criteriaSet.CriteriaSetValues, rushTimes, criteriaSet, "UnitValue");
             }
         }
 
@@ -1870,7 +1871,7 @@ namespace ImportPOC2
                     return;
                 }
 
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
 
                 if (splittedValue.CodeValue == Constants.BooleanFlag.TRUE)
                 {
@@ -1893,7 +1894,7 @@ namespace ImportPOC2
                                 if (setCodeValue != null)
                                 {
                                     long smplScvId = setCodeValue.ID;
-                                    createNewValue(criteriaCode, valueField, smplScvId);
+                                    _criteriaProcessor.CreateNewValue(criteriaCode, valueField, smplScvId);
                                 }
                             }
                         }
@@ -2118,7 +2119,7 @@ namespace ImportPOC2
                         aliasName = c;
                     }
                     // if colorname isn't recognized, then it gets "UNCLASSIFIED/other" grouping
-                    var productColors = getCriteriaSetValuesByCode("PRCL");
+                    var productColors = _criteriaProcessor.GetCSValuesByCriteriaCode("PRCL");
                     var colorObj = Lookups.ColorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => string.Equals(g.Description, colorName, StringComparison.CurrentCultureIgnoreCase));
                     var existing = productColors.FirstOrDefault(p => p.Value == aliasName);
 
@@ -2140,7 +2141,7 @@ namespace ImportPOC2
                     if (existing == null)
                     {
                         //needs to be added
-                        createNewValue("PRCL", aliasName, setCodeId);
+                        _criteriaProcessor.CreateNewValue("PRCL", aliasName, setCodeId);
                     }
                     else
                     {
@@ -2153,59 +2154,7 @@ namespace ImportPOC2
             }
         }
 
-        //TODO: can we "detect" what value type code to use instead of passing it in? 
-        //TODO: pass in criteria set, it's known from everywhere it is invoked
-        private static void createNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "")
-        {
-            var cSet = getCriteriaSetByCode(criteriaCode, optionName);
 
-            //create new criteria set value
-            var newCsv = new CriteriaSetValue
-            {
-                CriteriaCode = criteriaCode,
-                CriteriaSetId = cSet.CriteriaSetId,
-                Value = value,
-                ID = --_globalUniqueId,
-                ValueTypeCode = valueTypeCode,
-                CriteriaValueDetail = valueDetail,
-                FormatValue = value.ToString() //default formatvalue to be same as value
-            };
-
-            //create new criteria set code value
-            var newCscv = new CriteriaSetCodeValue
-            {
-                CriteriaSetValueId = newCsv.ID,
-                SetCodeValueId = setCodeValueId,
-                ID = --_globalUniqueId
-            };
-
-            newCsv.CriteriaSetCodeValues.Add(newCscv);
-            cSet.CriteriaSetValues.Add(newCsv);
-        }
-
-        private static IEnumerable<CriteriaSetValue> getCriteriaSetValuesByCode(string criteriaCode, string optionName = "")
-        {
-            var cSet = getCriteriaSetByCode(criteriaCode, optionName);
-            var result = cSet.CriteriaSetValues.ToList();
-
-            return result;
-        }
-
-        private static ProductCriteriaSet getCriteriaSetByCode(string criteriaCode, string optionName = "")
-        {
-            ProductCriteriaSet retVal = null;
-            var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
-
-            if (prodConfig != null)
-            {
-                var cSets = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
-                retVal = !string.IsNullOrWhiteSpace(optionName) ? cSets.FirstOrDefault(c =>  string.Equals(c.CriteriaDetail , optionName, StringComparison.CurrentCultureIgnoreCase)) : cSets.FirstOrDefault();
-            }
-
-            retVal = retVal ?? addCriteriaSet(criteriaCode, optionName);
-
-            return retVal;
-        }
 
         private static ProductCriteriaSet addCriteriaSet(string criteriaCode, string optionName = "")
         {
@@ -2237,12 +2186,12 @@ namespace ImportPOC2
                     .FirstOrDefault();
         }
 
-        private static CriteriaSetValue findCriteriaValue(long scvId, ProductCriteriaSet criteriaSet, string criteriaValue)
+        private static CriteriaSetValue getCsValueByAlias(long scvId, IEnumerable<CriteriaSetValue> criteriaSetValues, string alias)
         {
-            return (from v in criteriaSet.CriteriaSetValues
+            return (from v in criteriaSetValues
                     let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
                     where scv != null
-                        && v.Value == criteriaValue
+                        && v.Value == alias
                     select v)
                     .FirstOrDefault();
         }
@@ -2281,68 +2230,6 @@ namespace ImportPOC2
             return retVal;                
         }
 
-        //TODO: pretty sure this can be done without passing in criteriaset parameter
-        private static void deleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<string> models, ProductCriteriaSet criteriaSet)
-        {
-            //delete values that are missing from the list in the file
-            var valuesToDelete = entities.Select(e => e.Value).Except(models).Select(s => s).ToList();
-            valuesToDelete.ForEach(e =>
-            {
-                var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == e);
-                criteriaSet.CriteriaSetValues.Remove(toDelete);
-            });
-        }
-
-        private static void deleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<FieldInfo> models, ProductCriteriaSet criteriaSet, string fieldName)
-        {
-            //delete values that are missing from the list in the file
-            var csValuesToDelete = new List<CriteriaSetValue>();
-            entities.ToList().ForEach(e =>
-            {
-                {
-                    var exists = false;
-                    switch (fieldName)
-                    {
-                        case "UnitValue":
-                            if (e.Value is string)
-                            {
-                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value, StringComparison.CurrentCultureIgnoreCase));
-                            }
-                            else if (e.Value is IList)
-                            {
-                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value.First.UnitValue.ToString(), StringComparison.CurrentCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
-                            }
-                            else
-                            {
-                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value.UnitValue.ToString(), StringComparison.CurrentCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
-                            }
-                            break;
-                        default:
-                            exists = models.Any(m => m.Alias == e.CriteriaValueDetail);
-                            break;
-                    }
-
-                    if (!exists)
-                    {
-                        csValuesToDelete.Add(e);
-                    }
-                }
-            
-            });
-
-            csValuesToDelete.ForEach(e =>
-            {
-                var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v == e);
-                criteriaSet.CriteriaSetValues.Remove(toDelete);
-            });
-        }
-
-        //private static List<string> extractCsvList(string text)
-        //{
-        //    //returns list of strings from input string, split on commas, each value is trimmed, and only non-empty values are returned.
-        //    //return text.Split(',').Select(str => str.Trim()).Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
-        //    return text.ConvertToList();
-        //}        
 
         private static void finishProduct()
         {
