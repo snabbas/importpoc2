@@ -4,11 +4,13 @@ using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
 using ImportPOC2.Processors;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Radar.Core.Models.Batch;
 using Radar.Data;
 using Radar.Models;
 using Radar.Models.Product;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Configuration;
@@ -1392,9 +1394,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct)
             {
-                var criteriaCode = "SDIM";
-                var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                //var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                var criteriaCode = "SDIM";              
                 var dimensionTypes = new string[] { "Length", "Width", "Height" };
                 var shippingDimensions = text.Split(';');
 
@@ -1409,21 +1409,21 @@ namespace ImportPOC2
         {
             if (!string.IsNullOrWhiteSpace(dimensionUnitValue))
             {
-                var dimensionValues = dimensionUnitValue.Split(':');
+                var dimensionValues = dimensionUnitValue.SplitValue(':');
 
-                if (dimensionValues.Length == 2)
+                if (dimensionValues.CodeValue != dimensionValues.Alias)
                 {
                     var criteriaSet = getCriteriaSetByCode(criteriaCode);
                     var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
 
-                    var dimension = dimensionValues[0];
-                    var unit = dimensionValues[1];
+                    var dimension = dimensionValues.CodeValue;
+                    var unit = dimensionValues.Alias;
 
                     var criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, dimentionType);
                     var unitFound = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == unit);
                     if (unitFound != null)
                     {
-                        var value = new
+                        var value = new 
                         {
                             CriteriaAttributeId = criteriaAttribute.ID,
                             UnitValue = dimension,
@@ -1446,12 +1446,23 @@ namespace ImportPOC2
                         }
                         else
                         {
-                            var criteriaSetValue = existingCsvalues.FirstOrDefault();
-                            if (criteriaSetValue != null)
-                            {
-                             //   criteriaSetValue.Value.Add(value);
-                                //throws error when existing data 
+                            try
+                            {                                
+                                var values = (criteriaSet.CriteriaSetValues.FirstOrDefault().Value as IEnumerable<dynamic>).ToList();
+                                var exists = values.FirstOrDefault(v => !(v is string) && v != null && v.CriteriaAttributeId == value.CriteriaAttributeId);
+
+                                if (exists != null)
+                                {
+                                   values.Remove(exists);
+                                }
+
+                                values.Add(value);
+                                existingCsvalues.FirstOrDefault().Value = values;
                             }
+                            catch (Exception ex)
+                            {
+                            }
+                                                      
                         }
                     }
                     else
@@ -1894,9 +1905,8 @@ namespace ImportPOC2
                             CriteriaAttributeId = criteriaAttribute.ID,
                             UnitValue = days,
                             UnitOfMeasureCode = "BUSI"
-                        };
-                        var valueList = new List<dynamic> { value };
-                        criteriaSet.CriteriaSetValues.First().Value = valueList;                        
+                        };                      
+                        criteriaSet.CriteriaSetValues.First().Value = value;                        
                     }
                     else
                     {
@@ -1916,9 +1926,8 @@ namespace ImportPOC2
                         }
                     }
                 });
-
-                //TODO: Need to handle "value" as a list vs "value" as an object
-                //deleteCsValues(criteriaSet.CriteriaSetValues, rushTimes, criteriaSet, "UnitValue");
+              
+                deleteCsValues(criteriaSet.CriteriaSetValues, rushTimes, criteriaSet, "UnitValue");
             }
         }
 
@@ -2389,9 +2398,17 @@ namespace ImportPOC2
                     switch (fieldName)
                     {
                         case "UnitValue":
-                            if (!(e.Value is string))
+                            if (e.Value is string)
+                            {
+                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value, StringComparison.InvariantCultureIgnoreCase));
+                            }
+                            else if (e.Value is IList)
                             {
                                 exists = models.Any(m => string.Equals(m.CodeValue, e.Value.First.UnitValue.ToString(), StringComparison.InvariantCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
+                            }
+                            else
+                            {
+                                exists = models.Any(m => string.Equals(m.CodeValue, e.Value.UnitValue.ToString(), StringComparison.InvariantCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
                             }
                             break;
                         default:
