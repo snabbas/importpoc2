@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Linq;
 using System.Net.Http;
 using Newtonsoft.Json;
 using System.Net.Http.Headers;
@@ -22,19 +23,17 @@ namespace ImportPOC2.DataFetchers
 
         public static List<GenericLookUp> GetMatchingTradenames(string q)
         {
-            var temp_list = new List<KeyValueLookUp>();
-            var tradeNamesLookup = new List<GenericLookUp>();
+            List<GenericLookUp> tradeNamesLookup = null;
 
             var results = RadarHttpClient.GetAsync("lookup/trade_names?q=" + q).Result;
             if (results.IsSuccessStatusCode)
             {
                 var content = results.Content.ReadAsStringAsync().Result;
-                temp_list = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+                var fromRadar = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
 
-                if (temp_list != null)
-                {
-                    temp_list.ForEach(t => tradeNamesLookup.Add(new GenericLookUp { ID = t.Key, CodeValue = t.Value }));
-                }
+                //decouple radar lookup from public version
+                tradeNamesLookup = new List<GenericLookUp>();
+                tradeNamesLookup.AddRange(fromRadar.Select(s => new GenericLookUp { CodeValue = s.Value, ID = s.Key }));               
             }
 
             return tradeNamesLookup;                        
