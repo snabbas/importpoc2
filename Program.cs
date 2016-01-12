@@ -1484,16 +1484,48 @@ namespace ImportPOC2
         private static void processImprintSizeLocation(string imprintSizeText, string imprintLocationText)
         {
             //comma delimited list of imprint size location
-            if (_firstRowForProduct)
+            if (_firstRowForProduct && (!string.IsNullOrWhiteSpace(imprintSizeText) || !string.IsNullOrWhiteSpace(imprintLocationText)))
             {
                 var criteriaCode = Constants.CriteriaCodes.ImprintSizeLocation;
                 var imprintSizes = imprintSizeText.ConvertToList();
-                var imprintLocation = imprintLocationText.ConvertToList();
+                var imprintLocations = imprintLocationText.ConvertToList();
                 var criteriaSet = getCriteriaSetByCode(criteriaCode);
-                long customImprintSizeLocationScvId = 0;
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                var modelValues = new List<string>();
 
-                var imsz = Lookups.ImprintSizeLocationLookup.FirstOrDefault();
+                long customImprintSizeLocationScvId = 0;
+                List<FieldInfo> imprintSizeLocationSet = new List<FieldInfo>();
+                var i = 0;
+                
+                //using FieldInfo as a container for imprint size location set
+                //CodeValue will contain value for imprint size
+                //Alias will contain value for imprint location
+                for(; i < imprintSizes.Count; i++)
+                {
+                    var imszObject = new FieldInfo();
+                    imszObject.CodeValue = imprintSizes[i];
+
+                    if (imprintLocations.Count > i)
+                    {
+                        imszObject.Alias = imprintLocations[i];
+                    }
+
+                    imprintSizeLocationSet.Add(imszObject);
+                }
+
+                if (imprintSizes.Count < imprintLocations.Count)
+                {
+                    for(; i < imprintLocations.Count; i++)
+                    {
+                        var imszObject = new FieldInfo();
+                        imszObject.Alias = imprintLocations[i];
+
+                        imprintSizeLocationSet.Add(imszObject);
+                    }
+                }
+
                 //get set code value id for imprint size location
+                var imsz = Lookups.ImprintSizeLocationLookup.FirstOrDefault();                
                 if (imsz != null)
                 {
                     var group = imsz.CodeValueGroups.FirstOrDefault();
@@ -1507,9 +1539,22 @@ namespace ImportPOC2
                     }
                 }
 
-                //TODO: handle add new values for imprint size location
+                imprintSizeLocationSet.ForEach(item =>
+                {
+                    var size = item.CodeValue ?? string.Empty;
+                    var location = item.Alias ?? string.Empty;
+                    var valueToMatch = size + "|" + location;     
+          
+                    modelValues.Add(valueToMatch);
+                    var exists = existingCsvalues.Any(csv => csv.Equals(valueToMatch));
 
-                //TODO: handle delete for imprint size locations
+                    if (!exists)
+                    {
+                        createNewValue(criteriaCode, valueToMatch, customImprintSizeLocationScvId, "CUST");                            
+                    }
+                });
+
+                deleteCsValues(existingCsvalues, modelValues, criteriaSet);                                              
             }           
         }
 
@@ -2114,7 +2159,6 @@ namespace ImportPOC2
                         if (foundMediaCitation != null)
                         {
                             //see if this catalog is already associated with the product
-
                             var exists = _currentProduct.ProductMediaCitations.FirstOrDefault(m => m.MediaCitationId == foundMediaCitation.ID);
                             if (exists != null)
                             {
