@@ -75,8 +75,8 @@ namespace ImportPOC2
             set { _colorGroupList = value; }
         }
 
-        private static List<KeyValueLookUp> _shapesLookup = null;
-        public static List<KeyValueLookUp> ShapesLookup
+        private static List<GenericLookUp> _shapesLookup = null;
+        public static List<GenericLookUp> ShapesLookup
         {
             get
             {
@@ -86,9 +86,10 @@ namespace ImportPOC2
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        _shapesLookup = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
-                        ICollection<CodeValueLookUp> lookup = new List<CodeValueLookUp>();
-                        _shapesLookup.ForEach(s => lookup.Add(new CodeValueLookUp { Code = s.Key.ToString(), Value = s.Value }));
+                        var fromRadar = JsonConvert.DeserializeObject<List<KeyValueLookUp>>(content);
+                        //decouple radar lookup from public version
+                        _shapesLookup = new List<GenericLookUp>();
+                        _shapesLookup.AddRange(fromRadar.Select(s => new GenericLookUp {CodeValue = s.Value, ID = s.Key}));
                     }
                 }
                 return _shapesLookup;
@@ -96,8 +97,8 @@ namespace ImportPOC2
             set { _shapesLookup = value; }
         }
 
-        private static List<SetCodeValue> _themesLookup = null;
-        public static List<SetCodeValue> ThemesLookup
+        private static List<GenericLookUp> _themesLookup = null;
+        public static List<GenericLookUp> ThemesLookup
         {
             get
             {
@@ -108,9 +109,11 @@ namespace ImportPOC2
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
                         var themeGroups = JsonConvert.DeserializeObject<List<ThemeLookUp>>(content);
-                        _themesLookup = new List<SetCodeValue>();
+                        var tmp = new List<SetCodeValue>();
 
-                        themeGroups.ForEach(t => _themesLookup.AddRange(t.SetCodeValues));
+                        themeGroups.ForEach(t => tmp.AddRange(t.SetCodeValues));
+                        _themesLookup = new List<GenericLookUp>();
+                        _themesLookup.AddRange(tmp.Select(t => new GenericLookUp {CodeValue = t.CodeValue, ID = t.ID}));
                     }
                 }
                 return _themesLookup;
@@ -317,7 +320,7 @@ namespace ImportPOC2
         {
             get
             {
-                if (_imprintCriteriaLookup == null)
+                if (_imprintColorLookup == null)
                 {
                     var results = RadarHttpClient.GetAsync("lookup/criteria?code=COLR").Result;
                     if (results.IsSuccessStatusCode)

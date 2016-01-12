@@ -1,12 +1,10 @@
 ﻿using DocumentFormat.OpenXml;
-using DocumentFormat.OpenXml.Drawing;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
 using ImportPOC2.Processors;
 using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
-using Radar.Core.Models.Criteria;
 using Radar.Data;
 using Radar.Models;
 using Radar.Models.Product;
@@ -23,10 +21,10 @@ using System.Text.RegularExpressions;
 using Constants = Radar.Core.Common.Constants;
 using CriteriaSetCodeValue = Radar.Models.Criteria.CriteriaSetCodeValue;
 using CriteriaSetValue = Radar.Models.Criteria.CriteriaSetValue;
-using Path = System.IO.Path;
-using SetCodeValue = Radar.Models.Criteria.SetCodeValue;
 using MediaCitation = Radar.Models.Company.MediaCitation;
 using MediaCitationReference = Radar.Models.Company.MediaCitationReference;
+using Path = System.IO.Path;
+using SetCodeValue = Radar.Models.Criteria.SetCodeValue;
 
 [assembly: log4net.Config.XmlConfigurator(Watch = true)]
 
@@ -861,11 +859,7 @@ namespace ImportPOC2
         
         private static void processShapes(string text)
         {
-            //TODO: ensure we this the lookup as generic direct from Lookups object instead of converting here. 
-            var shapesAsGeneric = new List<GenericLookUp>();
-            shapesAsGeneric.AddRange(Lookups.ShapesLookup.Select(s => new GenericLookUp {CodeValue = s.Value, ID = s.Key}));
-
-            lookupFieldProcessor(text, Constants.CriteriaCodes.Shape, shapesAsGeneric);
+            lookupFieldProcessor(text, Constants.CriteriaCodes.Shape, Lookups.ShapesLookup);
         }
 
         private static void lookupFieldProcessor(string text, string criteriaCode, List<GenericLookUp> lookup)
@@ -932,7 +926,8 @@ namespace ImportPOC2
                         //add new value if it doesn't exists
                         if (!exists)
                         {
-                            createNewValue(criteriaCode, sheetValue, tradenameFound.ID.Value);
+                            if (tradenameFound.ID != null)
+                                createNewValue(criteriaCode, sheetValue, tradenameFound.ID.Value);
                         }
                     }                                                              
                 });
@@ -1285,10 +1280,7 @@ namespace ImportPOC2
         private static void processThemes(string text)
         {
             //TODO: ensure we this the lookup as generic direct from Lookups object instead of converting here. 
-            var themesAsGeneric = new List<GenericLookUp>();
-            themesAsGeneric.AddRange(Lookups.ThemesLookup.Select(t => new GenericLookUp {CodeValue = t.CodeValue, ID = t.ID}));
-
-            lookupFieldProcessor(text, Constants.CriteriaCodes.Theme, themesAsGeneric);
+            lookupFieldProcessor(text, Constants.CriteriaCodes.Theme, Lookups.ThemesLookup);
         }
 
         private static void processTradenames(string text)
@@ -1315,11 +1307,12 @@ namespace ImportPOC2
 
                     if (tradenameFound != null)
                     {                                       
-                        var exists = existingCsvalues.Any(v => v.BaseLookupValue.ToLower() == tradename.ToLower());
+                        var exists = existingCsvalues.Any(v => string.Equals(v.Value, tradename, StringComparison.InvariantCultureIgnoreCase));
                         //add new value if it doesn't exists
                         if (!exists)
                         {
-                            createNewValue(criteriaCode, tradename, tradenameFound.ID.Value);
+                            if (tradenameFound.ID != null)
+                                createNewValue(criteriaCode, tradename, tradenameFound.ID.Value);
                         }
                     }
                     else
@@ -1773,7 +1766,7 @@ namespace ImportPOC2
                         comment = productionTime.Alias;
                     }
 
-                    var exists = existingCsvalues.FirstOrDefault(v => v.Value != null && v.Value.UnitValue == time && v.CriteriaValueDetail == comment);
+                    var exists = existingCsvalues.FirstOrDefault(v => !(v.Value is string) && v.Value != null && v.Value.First.UnitValue == time && v.CriteriaValueDetail == comment);
                     //add new value if it doesn't exists
                     if (exists == null)
                     {
@@ -1903,7 +1896,7 @@ namespace ImportPOC2
                     _currentProduct.SelectedLineNames.Remove(toDelete);                    
                 });
             }
-        }        
+        }
 
         private static void processCatalogInfo(string text)
         {
@@ -1913,7 +1906,7 @@ namespace ImportPOC2
                 var catalog = text.ConvertToList();
                 var existingCatalog = _currentProduct.ProductMediaCitations;
 
-                if (catalog != null)
+                if (catalog != null && existingCatalog != null)
                 {
                     var cat = catalog.FirstOrDefault();
                     if (cat != null)
@@ -1924,10 +1917,11 @@ namespace ImportPOC2
                         if (foundMediaCitation != null)
                         {
                             //see if this catalog is already associated with the product
+
                             var exists = _currentProduct.ProductMediaCitations.FirstOrDefault(m => m.MediaCitationId == foundMediaCitation.ID);
                             if (exists != null)
                             {
-                                if (splittedCat.Length == 3 && !string.IsNullOrWhiteSpace(splittedCat[3]))
+                                if (splittedCat.Length == 3 && !string.IsNullOrWhiteSpace(splittedCat[2]))
                                 {
                                     var mediaRef = exists.ProductMediaCitationReferences.FirstOrDefault();
                                     if (mediaRef != null)
@@ -1940,9 +1934,9 @@ namespace ImportPOC2
                             {
                                 //per VELO-2863 only one catalog can be associated with the product
                                 //check if the product already has a catalog then replace with the new one
-                                if (_currentProduct.ProductMediaCitations.Any())                                
+                                if (_currentProduct.ProductMediaCitations.Any())
                                     _currentProduct.ProductMediaCitations.Clear();
-                                
+
                                 //create new media citation and add it to the current product's collection
                                 var newProductMediaCitation = new ProductMediaCitation();
                                 newProductMediaCitation.ProductId = _currentProduct.ID;
@@ -1959,10 +1953,10 @@ namespace ImportPOC2
                                 _currentProduct.ProductMediaCitations.Add(newProductMediaCitation);
                             }
                         }
-                    }                    
+                    }
                 }
             }
-        }                                
+        }
 
         private static void processMaterials(string text)
         {
@@ -2192,10 +2186,13 @@ namespace ImportPOC2
             //delete values that are missing from the list in the file
             var csValuesToDelete = new List<CriteriaSetValue>();
             entities.ToList().ForEach(e => {
-                var exists = models.FirstOrDefault(m => m.CodeValue == e.Value.UnitValue && m.Alias == e.CriteriaValueDetail);
-                if (exists == null)
+                if (!(e.Value is string))
                 {
-                    csValuesToDelete.Add(e);
+                    var exists = models.FirstOrDefault(m => string.Equals(m.CodeValue, e.Value.First.UnitValue.ToString(), StringComparison.InvariantCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
+                    if (exists == null)
+                    {
+                        csValuesToDelete.Add(e);
+                    }
                 }
             });
 
