@@ -2237,25 +2237,6 @@ namespace ImportPOC2
                     .FirstOrDefault();
         }
 
-        //private static CriteriaSetValue getCsValueBySetCodeValueId(long scvId, ProductCriteriaSet criteriaSet)
-        //{           
-        //    CriteriaSetValue retVal = null;
-
-        //    if (criteriaSet != null)
-        //    {                               
-        //        foreach (var v in 
-        //            from v in criteriaSet.CriteriaSetValues 
-        //            let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId) 
-        //            where scv != null select v)
-        //        {                    
-        //            retVal = v;
-        //            break;
-        //        }
-        //    }
-
-        //    return retVal; 
-        //}
-
         private static CriteriaSetValue findCriteriaValue(long scvId, ProductCriteriaSet criteriaSet, string criteriaValue)
         {
             return (from v in criteriaSet.CriteriaSetValues
