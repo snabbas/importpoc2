@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
 using Radar.Data;
 using Radar.Models;
+using Radar.Models.Criteria;
 using Radar.Models.Product;
 using System;
 using System.Collections;
@@ -1222,6 +1223,107 @@ namespace ImportPOC2
             }
         }
 
+        private enum MATERIAL_FORMAT
+        { 
+            SINGLE,
+            COMBO,
+            BLEND,
+            COMBO_BLEND
+        }
+
+        private static MATERIAL_FORMAT GetMaterialFormat(string text)
+        {
+            MATERIAL_FORMAT format = MATERIAL_FORMAT.SINGLE;
+            var isCombo = text.ToLower().Contains("combo");
+            var isBlend = text.ToLower().Contains("blend");
+
+            if (isCombo && !isBlend)
+            {
+                format = MATERIAL_FORMAT.COMBO;
+            }
+            else if (!isCombo && isBlend)
+            {
+                format = MATERIAL_FORMAT.BLEND;
+            }
+            else if (isCombo && isBlend)
+            {
+                format = MATERIAL_FORMAT.COMBO_BLEND;
+            }
+
+            return format;
+        }
+
+        private static MajorCodeValueGroup GetLookupMaterial(string materialName, string materialAlias, IEnumerable<MajorCodeValueGroup> lookup)
+        {
+            var validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialAlias, StringComparison.InvariantCultureIgnoreCase));
+
+            if (validMaterial == null)
+            {
+                if (materialName != materialAlias)
+                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialName, StringComparison.InvariantCultureIgnoreCase));
+
+                if (validMaterial == null) // Material is not found set group to Other
+                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, "Other", StringComparison.InvariantCultureIgnoreCase));
+            }
+
+            return validMaterial;
+        }
+
+        private static void genericProcessMaterial(string material, string materialAlias, string criteriaCode, MATERIAL_FORMAT materialFormat, IEnumerable<MajorCodeValueGroup> lookup)
+        {            
+            var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+            var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+            var validMaterial = GetLookupMaterial(material, materialAlias, lookup);
+
+            if (validMaterial != null)
+            {                       
+                var materialCSV = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), materialAlias, StringComparison.CurrentCultureIgnoreCase));
+                var setCodeValueId = validMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
+                //add new value if it doesn't exists
+                if (materialCSV == null)
+                {
+                    _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, setCodeValueId);
+                }
+                else
+                {
+                    switch (materialFormat)
+                    { 
+                        case MATERIAL_FORMAT.SINGLE:
+                            materialCSV.CriteriaSetCodeValues.FirstOrDefault().SetCodeValueId = setCodeValueId;
+                            break;
+                        case MATERIAL_FORMAT.COMBO:
+                            var cscv = materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == setCodeValueId);
+                            if (cscv == null)
+                            {
+                                var newCscv = new CriteriaSetCodeValue
+                                {
+                                    CriteriaSetValueId = materialCSV.ID,
+                                    SetCodeValueId = setCodeValueId,
+                                    ID = Utils.IdGenerator.getNextid()
+                                };
+
+                                materialCSV.CriteriaSetCodeValues.Add(newCscv);
+                            }
+                            else
+                            {
+                                cscv.SetCodeValueId = setCodeValueId;
+                            }
+                            break;
+                        case MATERIAL_FORMAT.BLEND:
+                            break;
+                        case MATERIAL_FORMAT.COMBO_BLEND:
+                            break;
+                    }                            
+                }                      
+            }
+            else
+            {
+                //log batch error
+                addValidationError(criteriaCode, material);
+                _hasErrors = true;
+            }               
+        }
+
         private static void processThemes(string text)
         {
             //TODO: ensure we this the lookup as generic direct from Lookups object instead of converting here. 
@@ -1305,12 +1407,12 @@ namespace ImportPOC2
 
                 for (var i = 0; i < shippingDimensions.Length; i++)
                 {
-                    processDimension(criteriaCode, dimensionTypes[i], shippingDimensions[i]);
+                    genericProcessDimension(criteriaCode, dimensionTypes[i], shippingDimensions[i]);
                 }
             }
         }
 
-        private static void processDimension(string criteriaCode, string dimentionType, string dimensionUnitValue)
+        private static void genericProcessDimension(string criteriaCode, string dimentionType, string dimensionUnitValue)
         {
             if (!string.IsNullOrWhiteSpace(dimensionUnitValue))
             {
@@ -1384,7 +1486,7 @@ namespace ImportPOC2
         {
             if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
-                processDimension("SHWT", "Unit", text);
+                genericProcessDimension("SHWT", "Unit", text);
             }
         }
 
@@ -2103,11 +2205,76 @@ namespace ImportPOC2
                     }
                 }
             }
-        }
+        }       
 
         private static void processMaterials(string text)
         {
-            //throw new NotImplementedException();
+            //comma separated list of values
+            if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
+            {
+                var criteriaCode = Constants.CriteriaCodes.Material;
+                var materialLookup = Lookups.MaterialLookup;
+                var valueList = text.ConvertToList();
+                var aliasList = new List<string>();
+                valueList.ForEach(value =>
+                {
+                    var material_format = GetMaterialFormat(value);
+                    var splittedValue = value.SplitValue('=');
+                    var materials = splittedValue.CodeValue;
+                    var materialAlias = splittedValue.Alias;
+                    aliasList.Add(materialAlias);
+                    switch (material_format)
+                    { 
+                        case MATERIAL_FORMAT.SINGLE:
+                            genericProcessMaterial(materials, materialAlias, criteriaCode, material_format, materialLookup);
+                            break;
+                        case MATERIAL_FORMAT.COMBO: //Format:  Group Name1:Combo:Group Name2=Alias
+                            processComboMaterial(materials, materialAlias, criteriaCode, material_format, materialLookup);                 
+                            break;
+                        case MATERIAL_FORMAT.BLEND: //Format:  Blend:Material1:%:Material2:%=Alias
+
+                            break;
+                        case MATERIAL_FORMAT.COMBO_BLEND: // Format:  Blend:Material1:%:Material2:%:Combo:Group Name=Alias OR
+                                                          // Format:  Group Name:Combo:Blend:Material1:%:Material2:%=Alias
+                                                         //  Format:  Blend:Material1:%:Material2:%:Combo:Blend:Material1:%:Material2:%=Alias
+
+                            break;
+                    }                    
+                });
+
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                _criteriaProcessor.DeleteCsValues(existingCsvalues, aliasList, criteriaSet);               
+            }            
+        }
+
+        private static void processComboMaterial(string materials, string materialAlias, string criteriaCode, MATERIAL_FORMAT material_format, List<MajorCodeValueGroup> materialLookup)
+        {
+            var materialSeparators = new string[] { ":Combo:" };
+            var comboMaterial = materials.Split(materialSeparators, StringSplitOptions.RemoveEmptyEntries);
+            if (comboMaterial.Length == 2)
+            {
+                var firstMaterialName = comboMaterial[0];
+                var firstValidMaterial = GetLookupMaterial(firstMaterialName, materialAlias, materialLookup);
+                var firstValidMaterialcvid = firstValidMaterial != null ? firstValidMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID : -1;
+
+                var secondMaterialName = comboMaterial[1];
+                var secondValidMaterial = GetLookupMaterial(secondMaterialName, materialAlias, materialLookup);
+                var secondValidMaterialcvid = secondValidMaterial != null ? secondValidMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID : -1;
+
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+                var materialCSV = criteriaSet.CriteriaSetValues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), materialAlias, StringComparison.CurrentCultureIgnoreCase));
+
+                _criteriaProcessor.deleteCodeValues(materialCSV, new List<long> { firstValidMaterialcvid, secondValidMaterialcvid }, criteriaSet);
+
+                genericProcessMaterial(firstMaterialName, materialAlias, criteriaCode, material_format, materialLookup);
+                genericProcessMaterial(secondMaterialName, materialAlias, criteriaCode, material_format, materialLookup);
+            }
+            else
+            {
+                addValidationError(criteriaCode, string.Join( materials , "=" , materialAlias));
+                _hasErrors = true;
+            }
         }
 
         private static void processProductColors(string text)
@@ -2168,7 +2335,7 @@ namespace ImportPOC2
                 //remove colors from product here. 
             }
         }                
-
+        
         private static MediaCitation FindMediaCitation(string[] catalogInfo)
         {
             MediaCitation retVal = null;

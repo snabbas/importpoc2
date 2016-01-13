@@ -7,6 +7,7 @@ using Radar.Models.Criteria;
 using Radar.Core.Common;
 using Radar.Models.Pricing;
 using Constants = Radar.Core.Common.Constants;
+using ImportPOC2.Models;
 
 namespace ImportPOC2
 {
@@ -16,17 +17,18 @@ namespace ImportPOC2
         public static int CurrentCompanyId;
 
         private static List<SetCodeValue> _imprintMethodsLookup = null;
+
         public static List<SetCodeValue> ImprintMethodsLookup
         {
             get
             {
                 if (_imprintMethodsLookup == null)
-                {                   
+                {
                     var results = RadarHttpClient.GetAsync("lookup/imprint_methods").Result;
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        _imprintMethodsLookup = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);                       
+                        _imprintMethodsLookup = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);
                     }
                 }
                 return _imprintMethodsLookup;
@@ -35,6 +37,7 @@ namespace ImportPOC2
         }
 
         private static List<Category> _catlist = null;
+
         public static List<Category> CategoryList
         {
             get
@@ -56,6 +59,7 @@ namespace ImportPOC2
         }
 
         private static List<ProductColorGroup> _colorGroupList = null;
+
         public static List<ProductColorGroup> ColorGroupList
         {
             get
@@ -77,6 +81,7 @@ namespace ImportPOC2
         }
 
         private static List<GenericLookUp> _shapesLookup = null;
+
         public static List<GenericLookUp> ShapesLookup
         {
             get
@@ -99,6 +104,7 @@ namespace ImportPOC2
         }
 
         private static List<GenericLookUp> _themesLookup = null;
+
         public static List<GenericLookUp> ThemesLookup
         {
             get
@@ -123,6 +129,7 @@ namespace ImportPOC2
         }
 
         private static List<GenericLookUp> _originsLookup = null;
+
         public static List<GenericLookUp> OriginsLookup
         {
             get
@@ -142,6 +149,7 @@ namespace ImportPOC2
         }
 
         private static List<KeyValueLookUp> _packagingLookup = null;
+
         public static List<KeyValueLookUp> PackagingLookup
         {
             get
@@ -161,6 +169,7 @@ namespace ImportPOC2
         }
 
         private static List<KeyValueLookUp> _complianceLookup = null;
+
         public static List<KeyValueLookUp> ComplianceLookup
         {
             get
@@ -180,6 +189,7 @@ namespace ImportPOC2
         }
 
         private static List<SafetyWarningLookUp> _safetywarningsLookup = null;
+
         public static List<SafetyWarningLookUp> SafetywarningsLookup
         {
             get
@@ -199,6 +209,7 @@ namespace ImportPOC2
         }
 
         private static List<CurrencyLookUp> _currencyLookup = null;
+
         public static List<CurrencyLookUp> CurrencyLookup
         {
             get
@@ -218,6 +229,7 @@ namespace ImportPOC2
         }
 
         private static List<CostTypeLookUp> _costTypesLookup = null;
+
         public static List<CostTypeLookUp> CostTypesLookup
         {
             get
@@ -237,6 +249,7 @@ namespace ImportPOC2
         }
 
         private static List<KeyValueLookUp> _inventoryStatusesLookup = null;
+
         public static List<KeyValueLookUp> InventoryStatusesLookup
         {
             get
@@ -256,6 +269,7 @@ namespace ImportPOC2
         }
 
         private static List<CriteriaAttribute> _criteriaAttributeLookup = null;
+
         public static CriteriaAttribute CriteriaAttributeLookup(string code, string name = "")
         {
             var criteriaAttribute = new CriteriaAttribute();
@@ -279,12 +293,13 @@ namespace ImportPOC2
                 {
                     criteriaAttribute = _criteriaAttributeLookup.FirstOrDefault(u => u.CriteriaCode == code && u.Description == name);
                 }
-            }                              
+            }
 
             return criteriaAttribute;
         }
 
         private static List<ImprintCriteriaLookUp> _imprintCriteriaLookup = null;
+
         public static List<ImprintCriteriaLookUp> ImprintCriteriaLookup
         {
             get
@@ -304,6 +319,7 @@ namespace ImportPOC2
         }
 
         private static List<ImprintCriteriaLookUp> _productionTimeCriteriaLookup = null;
+
         public static List<ImprintCriteriaLookUp> ProductionTimeCriteriaLookup
         {
             get
@@ -323,6 +339,7 @@ namespace ImportPOC2
         }
 
         private static List<CriteriaItem> _imprintColorLookup = null;
+
         public static List<CriteriaItem> ImprintColorLookup
         {
             get
@@ -342,17 +359,18 @@ namespace ImportPOC2
         }
 
         private static List<CriteriaItem> _imprintSizeLocationLookup = null;
+
         public static List<CriteriaItem> ImprintSizeLocationLookup
         {
             get
             {
                 if (_imprintSizeLocationLookup == null)
-                {                    
+                {
                     var results = RadarHttpClient.GetAsync("lookup/criteria?code=IMSZ").Result;
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        _imprintSizeLocationLookup = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);                       
+                        _imprintSizeLocationLookup = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);
                     }
                 }
                 return _imprintSizeLocationLookup;
@@ -361,6 +379,7 @@ namespace ImportPOC2
         }
 
         private static List<LineName> _linenamesLookup = null;
+
         public static List<LineName> LinenamesLookup
         {
             get
@@ -380,22 +399,23 @@ namespace ImportPOC2
         }
 
         private static List<GenericLookUp> _artworkLookup = null;
+
         public static List<GenericLookUp> ArtworkLookup
         {
             get
             {
                 if (_artworkLookup == null)
                 {
-                    _artworkLookup = new List<GenericLookUp>(); 
+                    _artworkLookup = new List<GenericLookUp>();
                     var artworks = ImprintCriteriaLookup.FirstOrDefault(l => l.Code == Constants.CriteriaCodes.Artwork);
                     if (artworks != null)
                     {
                         var group = artworks.CodeValueGroups.FirstOrDefault();
                         if (group != null)
                         {
-                            group.SetCodeValues.ToList().ForEach(s => _artworkLookup.Add(new GenericLookUp { ID = s.ID, CodeValue = s.CodeValue }));
+                            group.SetCodeValues.ToList().ForEach(s => _artworkLookup.Add(new GenericLookUp {ID = s.ID, CodeValue = s.CodeValue}));
                         }
-                    }                   
+                    }
                 }
                 return _artworkLookup;
             }
@@ -403,6 +423,7 @@ namespace ImportPOC2
         }
 
         private static List<SetCodeValue> _personalizationLookup = null;
+
         public static List<SetCodeValue> PersonalizationLookup
         {
             get
@@ -414,7 +435,7 @@ namespace ImportPOC2
                     if (results.IsSuccessStatusCode)
                     {
                         var content = results.Content.ReadAsStringAsync().Result;
-                        _personalizationLookup = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);                       
+                        _personalizationLookup = JsonConvert.DeserializeObject<List<SetCodeValue>>(content);
                     }
                 }
                 return _personalizationLookup;
@@ -423,6 +444,7 @@ namespace ImportPOC2
         }
 
         private static List<DiscountRate> _discountRates = null;
+
         public static List<DiscountRate> DiscountRates
         {
             get
@@ -443,6 +465,7 @@ namespace ImportPOC2
         }
 
         private static List<MediaCitation> _mediaCitations = null;
+
         public static List<MediaCitation> MediaCitations
         {
             get
@@ -463,6 +486,7 @@ namespace ImportPOC2
 
         private static List<CriteriaItem> _sizeTypes = null;
         private static List<GenericLookUp> _sizesLookup = null;
+
         public static List<GenericLookUp> SizesLookup
         {
             get
@@ -486,20 +510,21 @@ namespace ImportPOC2
                                 if (codeValueGroups != null)
                                 {
                                     codeValueGroups.ForEach(cvg =>
-                                    {                                       
-                                        _sizesLookup.AddRange(cvg.SetCodeValues.Select(scv => new GenericLookUp { CriteriaCode = size.Code, ID = scv.ID, CodeValue = scv.CodeValue }));
+                                    {
+                                        _sizesLookup.AddRange(cvg.SetCodeValues.Select(scv => new GenericLookUp {CriteriaCode = size.Code, ID = scv.ID, CodeValue = scv.CodeValue}));
                                     });
                                 }
                             });
-                        }                        
+                        }
                     }
                 }
                 return _sizesLookup;
             }
             set { _sizesLookup = value; }
         }
-        
+
         private static List<GenericIdLookup> _sizesIdsLookup = null;
+
         public static List<GenericIdLookup> SizeIdsLookup
         {
             get
@@ -542,6 +567,46 @@ namespace ImportPOC2
             }
             set { _sizesIdsLookup = value; }
         }
+
+        private static List<MajorCodeValueGroup> _materialLookup = null;
+
+        public static List<MajorCodeValueGroup> MaterialLookup
+        {
+            get
+            {
+                if (_materialLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/materials").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _materialLookup = JsonConvert.DeserializeObject<List<MajorCodeValueGroup>>(content);
+                    }
+                }
+                return _materialLookup;
+            }
+            set { _materialLookup = value; }
+        }
+
+        private static List<CodeDescriptionLookUp> _shipperbillsByLookup = null;
+
+        public static List<CodeDescriptionLookUp> ShipperbillsByLookup
+        {
+            get
+            {
+                if (_materialLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/shipper_bills_by").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _shipperbillsByLookup = JsonConvert.DeserializeObject<List<CodeDescriptionLookUp>>(content);
+                    }
+                }
+                return _shipperbillsByLookup;
+            }
+            set { _shipperbillsByLookup = value; }
+        }
     }
 
     public class StaticLookups
@@ -573,4 +638,4 @@ namespace ImportPOC2
             set { _sizeTypes = value; }
         }
     }
-}
+    

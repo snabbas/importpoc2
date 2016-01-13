@@ -1,7 +1,9 @@
 ﻿using ImportPOC2.Models;
+using ImportPOC2.Utils;
 using Radar.Core.Models.Batch;
 using Radar.Models;
 using Radar.Models.Product;
+using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 
@@ -342,29 +344,28 @@ namespace ImportPOC2.Processors
             if (_firstRowForProduct)
             {
                 if(!string.IsNullOrWhiteSpace(text))
-                {
-                    //TODO: this is incorrect - we have a lookup that is used for this field. 
-                    //TODO: see api/api/lookup/shipper_bills_by
-                    //TODO: remove the data you can specify "NULL" like other string fields, this code does not handle
+                {                 
+                     var code = string.Empty;
+                     if (string.Equals(text, "NULL", StringComparison.CurrentCultureIgnoreCase))
+                     {
+                         code = text;
+                     }
+                     else
+                     {
+                         var shipperBillByFound = Lookups.ShipperbillsByLookup.FirstOrDefault(t => string.Equals(t.Description, text, StringComparison.CurrentCultureIgnoreCase));
 
-                    var code = string.Empty;
-                    bool sizeOfPackage =  text.ToLower().Contains("size");
-                    bool weightOfPackage = text.ToLower().Contains("weight");
-
-                    if (sizeOfPackage && weightOfPackage)
-                    {
-                        code = "WSIZ";
-                    }
-                    else if (!sizeOfPackage && weightOfPackage)
-                    {
-                        code = "WEIG";
-                    }
-                    else if (sizeOfPackage && !weightOfPackage)
-                    {
-                        code = "SIZE";
-                    }
-
-                    _currentProduct.ShipperBillsByCode = BasicFieldProcessor.UpdateField(code, _currentProduct.ShipperBillsByCode);
+                         if (shipperBillByFound != null)
+                         {
+                             code = shipperBillByFound.Code;
+                         }
+                         else
+                         {
+                             //log batch error 
+                             //Validation.AddValidationError(_currentBatch, "", text, _currentProduct.ID, _currentProduct.ExternalProductId);
+                             //_hasErrors = true;
+                         }
+                     }
+                     _currentProduct.ShipperBillsByCode = BasicFieldProcessor.UpdateField(code, _currentProduct.ShipperBillsByCode);
                 }
             }
         }
