@@ -282,9 +282,32 @@ namespace ImportPOC2
         }
 
         private static void processSizes()
-        {
-            //TODO: VNI-6
-            //todo: will need to look at both size type and value columns to know what to do.
+        {           
+            if (string.IsNullOrWhiteSpace(_curProdRow.Size_Group) || string.IsNullOrWhiteSpace(_curProdRow.Size_Values))
+            {
+                addValidationError("SIZE", "size group/values must be provided");
+                return;
+            }
+
+            //determine size group
+            var sizeType = StaticLookups.SizeTypes.FirstOrDefault(s => s.Value == _curProdRow.Size_Group);
+            if (sizeType == null)
+            {
+                addValidationError("SIZE", "invalid size group found");
+                return;
+            }
+
+            if (sizeType.Code == Constants.CriteriaCodes.SIZE_CAPS || sizeType.Code == Constants.CriteriaCodes.SIZE_SVWT || sizeType.Code == Constants.CriteriaCodes.SIZE_DIMS)
+            {
+
+
+            }
+            else
+            {                               
+                var sizeCs = _criteriaProcessor.getSizeCriteriaSetByCode(sizeType.Code);
+                var sizeSetCodeValues = Lookups.SizesLookup.Where(s => s.CriteriaCode == sizeType.Code).ToList();
+                lookupFieldProcessor(_curProdRow.Size_Values, sizeType.Code, sizeSetCodeValues, sizeCs);
+            }            
         }
 
         private static void processColorsMaterials()
@@ -863,13 +886,13 @@ namespace ImportPOC2
             lookupFieldProcessor(text, Constants.CriteriaCodes.Shape, Lookups.ShapesLookup);
         }
 
-        private static void lookupFieldProcessor(string text, string criteriaCode, List<GenericLookUp> lookup)
+        private static void lookupFieldProcessor(string text, string criteriaCode, List<GenericLookUp> lookup, ProductCriteriaSet cs = null)
         {
             if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
                 //split the values, if it's csv 
                 var sheetValueList = text.ConvertToList();
-                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+                var criteriaSet = cs == null ? _criteriaProcessor.GetCriteriaSetByCode(criteriaCode) : cs;                                             
                 var existingCsValues = criteriaSet.CriteriaSetValues.ToList();
 
                 var sheetCodeValuesToValidate = parseByCriteriaCode(criteriaCode, sheetValueList);
@@ -879,13 +902,13 @@ namespace ImportPOC2
                 {
                     if (!sheetValue.ID.HasValue)
                     {
-                        handleValueExistenceByCode(criteriaCode, sheetValue);
+                        handleValueExistenceByCode(criteriaCode, sheetValue, existingCsValues);
                     }
 
                     if (sheetValue.ID.HasValue)
                     {
                         // ReSharper disable once PossibleInvalidOperationException
-                        var existing = getCsValueBySetCodeValueId(sheetValue.ID.Value, existingCsValues);
+                        var existing = _criteriaProcessor.getCsValueBySetCodeValueId(sheetValue.ID.Value, existingCsValues);
                         if (existing == null)
                         {
                             //create it
@@ -894,7 +917,7 @@ namespace ImportPOC2
                         else
                         {
                             //update existing value object? 
-                            updateCsValue(criteriaCode, sheetValue.CodeValue, sheetValue.ID.Value);
+                            updateCsValue(criteriaCode, existing, sheetValue.CodeValue, sheetValue.ID.Value);
                         }
                     }
                 });
@@ -967,7 +990,7 @@ namespace ImportPOC2
         /// <param name="criteriaCode"></param>
         /// <param name="sheetValue"></param>
         /// <returns></returns>
-        private static bool handleValueExistenceByCode(string criteriaCode, GenericLookUp sheetValue)
+        private static bool handleValueExistenceByCode(string criteriaCode, GenericLookUp sheetValue, IEnumerable<CriteriaSetValue> csValues = null)
         {
             var retVal = true;
             switch (criteriaCode)
@@ -1002,13 +1025,43 @@ namespace ImportPOC2
                     break;
                 case "MTRL":
                     break;
+
+                case "SABR":
+                case "SANS":
+                case "SAHU":
+                case "SAIT":
+                case "SAWI":
+                case "SSNM":
+                case "SVWT":
+                case "CAPS":
+                case "DIMS":
+                case "SOTH":                    
+                    //this will be a custom value
+                    //if the custom value doesn't exists already then create the new value
+                    var sizeIds = Lookups.SizeIdsLookup.FirstOrDefault(s => s.CriteriaCode == criteriaCode);                   
+                    if (sizeIds != null)
+                    {
+                        var existingCsValue = _criteriaProcessor.getCsValueByFormatValue(sizeIds.CustomSetCodeValueId, csValues, sheetValue.CodeValue);
+                        if (existingCsValue == null)
+                        {                            
+                            var value = new
+                            {
+                                CriteriaAttributeId = sizeIds.CriteriaAttributeId,
+                                UnitValue = sheetValue.CodeValue,
+                                UnitOfMeasureCode = ""                                
+                            }; 
+
+                            _criteriaProcessor.CreateNewValue(criteriaCode, value, sizeIds.CustomSetCodeValueId, "CUST");
+                        }
+                    }
+                    break;
             }
 
             return retVal;
         }
 
         //use this method to update an existing CSVs properites, such as comments (criteriaValueDetail field)
-        private static void updateCsValue(string criteriaCode, string criteriaValue, long setCodeValueId, string criteriaDetail = "")
+        private static void updateCsValue(string criteriaCode, CriteriaSetValue csValue, string criteriaValue, long setCodeValueId, string criteriaDetail = "")
         {
             //use criteria code to ensure we do the right type of update
             switch (criteriaCode)
@@ -1019,7 +1072,12 @@ namespace ImportPOC2
                 case "ORGN":
                     //do nothing, you can't update existing values in these sets
                     break;
-
+                
+                case "IMMD":
+                    var cscv = csValue.CriteriaSetCodeValues.FirstOrDefault();
+                    if (cscv != null)                    
+                        cscv.SetCodeValueId = setCodeValueId;                    
+                    break;
             }
         }
 
@@ -1036,13 +1094,11 @@ namespace ImportPOC2
                 var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 long customSetCodeValueId = 0;
 
-                //get id for custom additional location
-                var criteriaLookUp = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => string.Equals(i.Code, criteriaCode, StringComparison.CurrentCultureIgnoreCase));
-
-                if (criteriaLookUp != null)
-                {
-                    //TODO: this lookup should not be here but in the Lookups class
-                    var group = criteriaLookUp.CodeValueGroups.FirstOrDefault(cvg => string.Equals(cvg.Description, "Other", StringComparison.CurrentCultureIgnoreCase));
+                //get other set code value id
+                var imprintCriteria = Lookups.ImprintCriteriaLookup.FirstOrDefault(i => string.Equals(i.Code, criteriaCode, StringComparison.CurrentCultureIgnoreCase));
+                if (imprintCriteria != null)
+                {                   
+                    var group = imprintCriteria.CodeValueGroups.FirstOrDefault(cvg => string.Equals(cvg.Description, "Other", StringComparison.CurrentCultureIgnoreCase));
                     if (group != null)
                     {
                         var setCodeValue = group.SetCodeValues.FirstOrDefault();
@@ -1077,20 +1133,25 @@ namespace ImportPOC2
                 var valueList = text.ConvertToList();                
                 var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
                 var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                var modelValues = new List<string>();
 
                 valueList.ForEach(value =>
                 {                    
                     var splittedValue = value.SplitValue('=');
+                    modelValues.Add(splittedValue.Alias);
                     var existing = Lookups.ImprintMethodsLookup.FirstOrDefault(l => String.Equals(l.CodeValue, splittedValue.CodeValue, StringComparison.CurrentCultureIgnoreCase));
                     if (existing != null)
                     {
-                        var exists = existingCsvalues.Any(csv => string.Equals(csv.Value.ToString(), splittedValue.Alias, StringComparison.CurrentCultureIgnoreCase));
+                        var existingCsValue = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), splittedValue.Alias, StringComparison.CurrentCultureIgnoreCase));
                         //add new value if it doesn't exists
-                        if (!exists)
+                        if (existingCsValue ==  null)
                         {
                             _criteriaProcessor.CreateNewValue(criteriaCode, splittedValue.Alias, existing.ID);
                         }
-                        //TODO: alias is the PK, they might have changed method selection for alias, this triggers a set code value ID update
+                        else
+                        {
+                            updateCsValue(criteriaCode, existingCsValue, "", existing.ID);
+                        }                       
                         //NOTE alias cannot be "updated" - an alias change triggers a delete then add of new CSV
                     }
                     else
@@ -1101,7 +1162,7 @@ namespace ImportPOC2
                     }
                 });
 
-                _criteriaProcessor.DeleteCsValues(existingCsvalues, valueList, criteriaSet);
+                _criteriaProcessor.DeleteCsValues(existingCsvalues, modelValues, criteriaSet);
             }
         }
 
@@ -1168,47 +1229,8 @@ namespace ImportPOC2
         }
 
         private static void processTradenames(string text)
-        {                     
-
-            if (string.IsNullOrWhiteSpace(text))
-                return;
-
-            lookupFieldProcessor_Tradenames(text, Constants.CriteriaCodes.TradeName);
-
-            //comma delimited list of trade names
-            //if (_firstRowForProduct)
-            //{
-            //    var criteriaCode = Constants.CriteriaCodes.TradeName;
-            //    var tradenames = text.ConvertToList();
-            //    var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
-
-            //    var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-
-            //    tradenames.ForEach(tradename =>
-            //    {
-            //        var results = DataFetchers.Lookup.GetMatchingTradenames(tradename);
-            //        var tradenameFound = results.FirstOrDefault();
-
-            //        if (tradenameFound != null)
-            //        {
-            //            var exists = existingCsvalues.Any(v => string.Equals(v.Value, tradename, StringComparison.CurrentCultureIgnoreCase));
-            //            //add new value if it doesn't exists
-            //            if (!exists)
-            //            {
-            //                if (tradenameFound.ID != null)
-            //                    _criteriaProcessor.CreateNewValue(criteriaCode, tradename, tradenameFound.ID.Value);
-            //            }
-            //        }
-            //        else
-            //        {
-            //            //log batch error
-            //            addValidationError(criteriaCode, tradename);
-            //            _hasErrors = true;
-            //        }
-            //    });
-
-            //    _criteriaProcessor.DeleteCsValues(existingCsvalues, tradenames, criteriaSet);
-            //}
+        {                                 
+            lookupFieldProcessor_Tradenames(text, Constants.CriteriaCodes.TradeName);            
         }
 
         private static void processOrigins(string text)
@@ -1455,12 +1477,7 @@ namespace ImportPOC2
 
         private static void processImprintMethods(string text)
         {
-            genericProcessImprintMethods(text, Constants.CriteriaCodes.ImprintMethod, Lookups.ImprintMethodsLookup);                       
-
-            //var imprintMethodsAsGeneric = new List<GenericLookUp>();
-            //imprintMethodsAsGeneric.AddRange(Lookups.ImprintMethodsLookup.Select(s => new GenericLookUp { CodeValue = s.CodeValue, ID = s.ID }));
-
-            //lookupFieldProcessor(text, Constants.CriteriaCodes.ImprintMethod, imprintMethodsAsGeneric);
+            genericProcessImprintMethods(text, Constants.CriteriaCodes.ImprintMethod, Lookups.ImprintMethodsLookup);                                   
         }
 
         private static void processPersonalization(string text)
@@ -1553,7 +1570,7 @@ namespace ImportPOC2
 
                 if (criteriaSet != null)
                 {
-                    unimprintedCsvalue = getCsValueBySetCodeValueId(soldUnimprintedScvId, criteriaSet.CriteriaSetValues);
+                    unimprintedCsvalue = _criteriaProcessor.getCsValueBySetCodeValueId(soldUnimprintedScvId, criteriaSet.CriteriaSetValues);
                 }
 
                 if (soldUnimprinted == "Y")
@@ -1606,13 +1623,11 @@ namespace ImportPOC2
                         CriteriaSetValue existingCsValue = null;
                         if (exists.ID != otherArtworkScValueId)
                         {
-                            if (exists.ID != null)
-                                existingCsValue = getCsValueBySetCodeValueId(exists.ID.Value, existingCsvalues);
+                            existingCsValue = _criteriaProcessor.getCsValueBySetCodeValueId(exists.ID.Value, existingCsvalues);                                                           
                         }
                         else
-                        {
-                            if (exists.ID != null)//TODO: does this make sense, same as previous test?
-                                existingCsValue = getCsValueByAlias(exists.ID.Value, existingCsvalues, splittedValue.Alias);
+                        {                           
+                            existingCsValue = _criteriaProcessor.getCsValueByAlias(exists.ID.Value, existingCsvalues, splittedValue.Alias);
                         }
 
                         //add new value if it doesn't exists
@@ -2152,49 +2167,7 @@ namespace ImportPOC2
 
                 //remove colors from product here. 
             }
-        }
-
-
-
-        private static ProductCriteriaSet addCriteriaSet(string criteriaCode, string optionName = "")
-        {
-            var newCs = new ProductCriteriaSet
-            {
-                CriteriaCode = criteriaCode,
-                CriteriaSetId = 0,
-                ProductId = _currentProduct.ID
-            };
-
-            if (!string.IsNullOrWhiteSpace(optionName))
-            {
-                newCs.CriteriaDetail = optionName;
-            }
-
-            var productConfiguration = _currentProduct.ProductConfigurations.FirstOrDefault(cfg => cfg.IsDefault);
-            if (productConfiguration != null)
-                productConfiguration.ProductCriteriaSets.Add(newCs);
-
-            return newCs;
-        }
-
-        private static CriteriaSetValue getCsValueBySetCodeValueId(long scvId, IEnumerable<CriteriaSetValue> criteriaSetValues)
-        {
-            return (from v in criteriaSetValues
-                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
-                    where scv != null
-                    select v)
-                    .FirstOrDefault();
-        }
-
-        private static CriteriaSetValue getCsValueByAlias(long scvId, IEnumerable<CriteriaSetValue> criteriaSetValues, string alias)
-        {
-            return (from v in criteriaSetValues
-                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
-                    where scv != null
-                        && v.Value == alias
-                    select v)
-                    .FirstOrDefault();
-        }
+        }                
 
         private static MediaCitation FindMediaCitation(string[] catalogInfo)
         {
@@ -2229,7 +2202,6 @@ namespace ImportPOC2
 
             return retVal;                
         }
-
 
         private static void finishProduct()
         {

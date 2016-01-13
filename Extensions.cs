@@ -11,7 +11,7 @@ namespace ImportPOC2
             var lstValues = new List<string>();
             if (!string.IsNullOrWhiteSpace(value))
             {
-                var result = Regex.Matches(value, @"\w+([-:;=+*\s]+\w+)*|\[.*?\]").Cast<Match>().Select(m => m.Value).ToArray();
+                var result = Regex.Matches(value, @"\w+([-:;=/()+*\s]+\w+)*|\[.*?\]").Cast<Match>().Select(m => m.Value).ToArray();
                 char[] charsToTrim = {'[', ']'};
                 foreach (string str in result)
                 {

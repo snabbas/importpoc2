@@ -6,6 +6,7 @@ using Radar.Models.Company;
 using Radar.Models.Criteria;
 using Radar.Core.Common;
 using Radar.Models.Pricing;
+using Constants = Radar.Core.Common.Constants;
 
 namespace ImportPOC2
 {
@@ -255,7 +256,7 @@ namespace ImportPOC2
         }
 
         private static List<CriteriaAttribute> _criteriaAttributeLookup = null;
-        public static CriteriaAttribute CriteriaAttributeLookup(string code, string name)
+        public static CriteriaAttribute CriteriaAttributeLookup(string code, string name = "")
         {
             var criteriaAttribute = new CriteriaAttribute();
             if (_criteriaAttributeLookup == null)
@@ -268,11 +269,17 @@ namespace ImportPOC2
                 }
             }
 
-            if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name))
+            if (_criteriaAttributeLookup != null)
             {
-                if (_criteriaAttributeLookup != null)
+                if (!string.IsNullOrWhiteSpace(code) && string.IsNullOrWhiteSpace(name))
+                {
+                    criteriaAttribute = _criteriaAttributeLookup.FirstOrDefault(u => u.CriteriaCode == code);
+                }
+                else
+                {
                     criteriaAttribute = _criteriaAttributeLookup.FirstOrDefault(u => u.CriteriaCode == code && u.Description == name);
-            }
+                }
+            }                              
 
             return criteriaAttribute;
         }
@@ -452,6 +459,118 @@ namespace ImportPOC2
                 return _mediaCitations;
             }
             set { _mediaCitations = value; }
+        }
+
+        private static List<CriteriaItem> _sizeTypes = null;
+        private static List<GenericLookUp> _sizesLookup = null;
+        public static List<GenericLookUp> SizesLookup
+        {
+            get
+            {
+                if (_sizesLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/sizes").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _sizeTypes = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);
+
+                        //decouple radar lookup from public version
+                        _sizesLookup = new List<GenericLookUp>();
+
+                        if (_sizeTypes != null)
+                        {
+                            _sizeTypes.ForEach(size =>
+                            {
+                                var codeValueGroups = size.CodeValueGroups.Where(cvg => !cvg.Description.Contains("-Other")).ToList();
+                                if (codeValueGroups != null)
+                                {
+                                    codeValueGroups.ForEach(cvg =>
+                                    {                                       
+                                        _sizesLookup.AddRange(cvg.SetCodeValues.Select(scv => new GenericLookUp { CriteriaCode = size.Code, ID = scv.ID, CodeValue = scv.CodeValue }));
+                                    });
+                                }
+                            });
+                        }                        
+                    }
+                }
+                return _sizesLookup;
+            }
+            set { _sizesLookup = value; }
+        }
+        
+        private static List<GenericIdLookup> _sizesIdsLookup = null;
+        public static List<GenericIdLookup> SizeIdsLookup
+        {
+            get
+            {
+                if (_sizesIdsLookup == null)
+                {
+                    if (_sizeTypes == null)
+                    {
+                        var results = RadarHttpClient.GetAsync("lookup/sizes").Result;
+                        if (results.IsSuccessStatusCode)
+                        {
+                            var content = results.Content.ReadAsStringAsync().Result;
+                            _sizeTypes = JsonConvert.DeserializeObject<List<CriteriaItem>>(content);
+                        }
+                    }
+
+                    _sizesIdsLookup = new List<GenericIdLookup>();
+
+                    _sizeTypes.ForEach(sizeType =>
+                    {
+                        var genericItem = new GenericIdLookup();
+                        genericItem.CriteriaCode = sizeType.Code;
+
+                        var otherCodeValueGroup = sizeType.CodeValueGroups.FirstOrDefault(cvg => cvg.Description.Contains("Other"));
+                        if (otherCodeValueGroup != null)
+                        {
+                            var otherSetCodeValue = otherCodeValueGroup.SetCodeValues.FirstOrDefault();
+                            if (otherSetCodeValue != null)
+                                genericItem.CustomSetCodeValueId = otherSetCodeValue.ID;
+                        }
+
+                        var criteriaAttribute = CriteriaAttributeLookup(sizeType.Code);
+                        if (criteriaAttribute != null)
+                            genericItem.CriteriaAttributeId = criteriaAttribute.ID;
+
+                        _sizesIdsLookup.Add(genericItem);
+                    });
+                }
+                return _sizesIdsLookup;
+            }
+            set { _sizesIdsLookup = value; }
+        }
+    }
+
+    public class StaticLookups
+    {
+        private static List<CodeValueLookUp> _sizeTypes = null;
+        public static List<CodeValueLookUp> SizeTypes
+        {
+            get
+            {
+                if (_sizeTypes == null)
+                {
+                    //build a static collection of size types and criteria codes
+                    //the size type value commes from the import template sheet
+                    //the collection will be used for doing size type validation
+                    _sizeTypes = new List<CodeValueLookUp>();
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "SABR", Value = "Apparel - Bra Sizes" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "SANS", Value = "Apparel - Dress Shirt Sizes" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "SAHU", Value = "Apparel - Hosiery/Uniform Sizes" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "SAIT", Value = "Apparel - Infant/Toddler Sizes" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "SAWI", Value = "Apparel - Pants Sizes" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "SSNM", Value = "Standard & Numbered" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "DIMS", Value = "Dimension" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "SVWT", Value = "Volume/Weight" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "CAPS", Value = "Capacity" });
+                    _sizeTypes.Add(new CodeValueLookUp { Code = "SOTH", Value = "Other" });
+                }
+                return _sizeTypes;
+            }
+            set { _sizeTypes = value; }
         }
     }
 }

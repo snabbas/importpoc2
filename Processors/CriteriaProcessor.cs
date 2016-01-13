@@ -6,6 +6,7 @@ using System.Text;
 using System.Threading.Tasks;
 using Radar.Models.Criteria;
 using Radar.Models.Product;
+using Constants = Radar.Core.Common.Constants;
 
 namespace ImportPOC2.Processors
 {
@@ -39,7 +40,7 @@ namespace ImportPOC2.Processors
             return retVal;
         }
 
-        private ProductCriteriaSet addCriteriaSet(string criteriaCode, string optionName)
+        private ProductCriteriaSet addCriteriaSet(string criteriaCode, string optionName = "")
         {
             var newCs = new ProductCriteriaSet
             {
@@ -103,10 +104,10 @@ namespace ImportPOC2.Processors
         public void DeleteCsValues(IEnumerable<CriteriaSetValue> entities, IEnumerable<string> models, ProductCriteriaSet criteriaSet)
         {
             //delete values that are missing from the list in the file
-            var valuesToDelete = entities.Select(e => e.Value).Except(models).Select(s => s).ToList();
+            var valuesToDelete = entities.Select(e => e.FormatValue).Except(models).Select(s => s).ToList();
             valuesToDelete.ForEach(e =>
             {
-                var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.Value == e);
+                var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v.FormatValue == e);
                 criteriaSet.CriteriaSetValues.Remove(toDelete);
             });
         }
@@ -134,7 +135,7 @@ namespace ImportPOC2.Processors
                             {
                                 exists = models.Any(m => string.Equals(m.CodeValue, e.Value.UnitValue.ToString(), StringComparison.CurrentCultureIgnoreCase) && m.Alias == e.CriteriaValueDetail);
                             }
-                            break;
+                            break;                       
                         default:
                             exists = models.Any(m => m.Alias == e.CriteriaValueDetail);
                             break;
@@ -145,7 +146,6 @@ namespace ImportPOC2.Processors
                         csValuesToDelete.Add(e);
                     }
                 }
-
             });
 
             csValuesToDelete.ForEach(e =>
@@ -155,5 +155,76 @@ namespace ImportPOC2.Processors
             });
         }
 
+        public CriteriaSetValue getCsValueBySetCodeValueId(long scvId, IEnumerable<CriteriaSetValue> criteriaSetValues)
+        {
+            return (from v in criteriaSetValues
+                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
+                    where scv != null
+                    select v)
+                    .FirstOrDefault();
+        }
+
+        public CriteriaSetValue getCsValueByAlias(long scvId, IEnumerable<CriteriaSetValue> criteriaSetValues, string alias)
+        {
+            return (from v in criteriaSetValues
+                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
+                    where scv != null
+                        && v.Value == alias
+                    select v)
+                    .FirstOrDefault();
+        }
+
+        public CriteriaSetValue getCsValueByFormatValue(long scvId, IEnumerable<CriteriaSetValue> criteriaSetValues, string formatValue)
+        {
+            return (from v in criteriaSetValues
+                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
+                    where scv != null
+                        && v.FormatValue == formatValue
+                    select v)
+                    .FirstOrDefault();
+        }
+
+        public ProductCriteriaSet getSizeCriteriaSetByCode(string criteriaCode)
+        {
+            ProductCriteriaSet retVal = null;
+            var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
+
+            if (prodConfig != null)
+            {
+                var cSet = prodConfig.ProductCriteriaSets.FirstOrDefault(c => c.CriteriaCode == criteriaCode);
+                if (cSet == null)
+                {
+                    cSet = prodConfig.ProductCriteriaSets.FirstOrDefault(c => Constants.CriteriaCodes.SIZE.Contains(c.CriteriaCode));
+                    //create a new size criteria set if none already exists
+                    if (cSet == null)
+                    {
+                        retVal = addCriteriaSet(criteriaCode);
+                    }
+                    else
+                    {
+                        //if another size criteria set already exists replace it with the new size criteria set
+                        removeCriteriaSet(cSet.CriteriaCode);
+                        retVal = addCriteriaSet(criteriaCode);
+                    }
+                }
+                else
+                {
+                    retVal = cSet;
+                }
+            }
+
+            return retVal;
+        }
+
+        public void removeCriteriaSet(string criteriaCode)
+        {
+            var productConfiguration = _currentProduct.ProductConfigurations.FirstOrDefault(cfg => cfg.IsDefault);
+            if (productConfiguration != null)
+            {
+                var cs = productConfiguration.ProductCriteriaSets.FirstOrDefault(c => c.CriteriaCode == criteriaCode);
+                if (cs != null)
+                    productConfiguration.ProductCriteriaSets.Remove(cs);
+            }
+        }
     }
 }
