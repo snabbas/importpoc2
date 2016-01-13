@@ -155,5 +155,29 @@ namespace ImportPOC2.Processors
             });
         }
 
+        public void deleteCodeValues(CriteriaSetValue entity, IEnumerable<long> models, ProductCriteriaSet criteriaSet)
+        {
+            if (entity != null)
+            {
+                var exists = false;
+                var csValuesToDelete = new List<CriteriaSetCodeValue>();
+
+                entity.CriteriaSetCodeValues.ToList().ForEach(e =>
+                {
+                    exists = models.Any(m => m == e.SetCodeValueId);
+
+                    if (!exists)
+                    {
+                        csValuesToDelete.Add(e);
+                    }
+                });
+
+                csValuesToDelete.ForEach(e =>
+                {
+                    var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault().CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == e.SetCodeValueId);
+                    criteriaSet.CriteriaSetValues.FirstOrDefault().CriteriaSetCodeValues.Remove(toDelete);
+                });
+            }
+        }
     }
 }
