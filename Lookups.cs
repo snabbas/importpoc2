@@ -6,6 +6,7 @@ using Radar.Models.Company;
 using Radar.Models.Criteria;
 using Radar.Core.Common;
 using Radar.Models.Pricing;
+using ImportPOC2.Models;
 
 namespace ImportPOC2
 {
@@ -452,6 +453,44 @@ namespace ImportPOC2
                 return _mediaCitations;
             }
             set { _mediaCitations = value; }
+        }
+
+        private static List<MajorCodeValueGroup> _materialLookup = null;
+        public static List<MajorCodeValueGroup> MaterialLookup
+        {
+            get
+            {
+                if (_materialLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/materials").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _materialLookup = JsonConvert.DeserializeObject<List<MajorCodeValueGroup>>(content);
+                    }
+                }
+                return _materialLookup;
+            }
+            set { _materialLookup = value; }
+        }
+
+        private static List<CodeDescriptionLookUp> _shipperbillsByLookup = null;
+        public static List<CodeDescriptionLookUp> ShipperbillsByLookup
+        {
+            get
+            {
+                if (_materialLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/shipper_bills_by").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _shipperbillsByLookup = JsonConvert.DeserializeObject<List<CodeDescriptionLookUp>>(content);
+                    }
+                }
+                return _shipperbillsByLookup;
+            }
+            set { _shipperbillsByLookup = value; }
         }
     }
 }

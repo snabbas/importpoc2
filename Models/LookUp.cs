@@ -9,6 +9,13 @@ namespace ImportPOC2
         public string Value { get; set; }
     }
 
+    public class CodeDescriptionLookUp
+    {
+        public string Code { get; set; }
+        public string Description { get; set; }
+    }
+
+
     public class GenericLookUp
     {
         public string CodeValue { get; set; }

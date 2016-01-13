@@ -361,7 +361,7 @@ namespace ImportPOC2.Processors
                          else
                          {
                              //log batch error 
-                             Validation.AddValidationError(_currentBatch, "", text, _currentProduct.ID, _currentProduct.ExternalProductId);
+                             //Validation.AddValidationError(_currentBatch, "", text, _currentProduct.ID, _currentProduct.ExternalProductId);
                              //_hasErrors = true;
                          }
                      }
