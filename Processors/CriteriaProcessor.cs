@@ -2,11 +2,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Radar.Models.Criteria;
 using Radar.Models.Product;
 using Constants = Radar.Core.Common.Constants;
+using CriteriaSetCodeValue = Radar.Models.Criteria.CriteriaSetCodeValue;
+using CriteriaSetValue = Radar.Models.Criteria.CriteriaSetValue;
 
 namespace ImportPOC2.Processors
 {
@@ -27,16 +26,18 @@ namespace ImportPOC2.Processors
         public ProductCriteriaSet GetCriteriaSetByCode(string criteriaCode, string optionName = "")
         {
             ProductCriteriaSet retVal = null;
-            var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
-
-            if (prodConfig != null)
+            if (!string.IsNullOrWhiteSpace(criteriaCode))
             {
-                var cSets = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
-                retVal = !string.IsNullOrWhiteSpace(optionName) ? cSets.FirstOrDefault(c =>  string.Equals(c.CriteriaDetail , optionName, StringComparison.CurrentCultureIgnoreCase)) : cSets.FirstOrDefault();
+                var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
+
+                if (prodConfig != null)
+                {
+                    var cSets = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
+                    retVal = !string.IsNullOrWhiteSpace(optionName) ? cSets.FirstOrDefault(c => string.Equals(c.CriteriaDetail, optionName, StringComparison.CurrentCultureIgnoreCase)) : cSets.FirstOrDefault();
+                }
+
+                retVal = retVal ?? addCriteriaSet(criteriaCode, optionName);
             }
-
-            retVal = retVal ?? addCriteriaSet(criteriaCode, optionName);
-
             return retVal;
         }
 
@@ -153,6 +154,64 @@ namespace ImportPOC2.Processors
                 var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault(v => v == e);
                 criteriaSet.CriteriaSetValues.Remove(toDelete);
             });
+        }
+
+
+        /// <summary>
+        /// given a configuration string in import sheet format (i.e., "PRCL:Red,Blue") return CSV objects that match. 
+        /// </summary>
+        /// <param name="criteriaDefinition"></param>
+        /// <returns></returns>
+        public List<CriteriaSetValue> GetValuesBySheetSpecification(string criteriaDefinition)
+        {
+            var retVal = new List<CriteriaSetValue>();
+
+            if (!string.IsNullOrWhiteSpace(criteriaDefinition))
+            {
+                //get criteria code
+                var code = parseCodeFromPriceCriteria(criteriaDefinition);
+                // get list of values
+                var val = parseValuesFromPriceCriteria(criteriaDefinition);
+                // match 'em up
+
+                var allcsvs = GetCSValuesByCriteriaCode(code);
+
+            }
+            return retVal;
+        }
+
+        private string parseCodeFromPriceCriteria(string criteriaDefinition)
+        {
+            var retVal = string.Empty;
+            if (!string.IsNullOrWhiteSpace(criteriaDefinition))
+            {
+                var tmp = criteriaDefinition.Split(':');
+                if (tmp.Length > 1)
+                {
+                    if (tmp[0].Trim().Length == 4)
+                    {
+                        //it "appears" to be a valid code, send it back;
+                        retVal = tmp[0].Trim();
+                    }
+                }
+            }
+
+            return retVal;
+        }
+
+        private string parseValuesFromPriceCriteria(string criteriaDefinition)
+        {
+            var retVal = string.Empty;
+            if (!string.IsNullOrWhiteSpace(criteriaDefinition))
+            {
+                //note: cannot use Split here as values could have embedded colons
+                var separatorPos = criteriaDefinition.IndexOf(':');
+                var tmp = criteriaDefinition.Substring(separatorPos + 1);
+
+                retVal = tmp.Trim();
+            }
+
+            return retVal;
         }
 
         public void deleteCodeValues(CriteriaSetValue entity, IEnumerable<long> models, ProductCriteriaSet criteriaSet)

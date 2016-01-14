@@ -3,10 +3,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using ImportPOC2.Models;
-using Radar.Core.Models.Criteria;
 using Radar.Models.Pricing;
 using Radar.Models.Product;
-using CriteriaSetValue = Radar.Models.Criteria.CriteriaSetValue;
 
 namespace ImportPOC2.Processors
 {
@@ -23,7 +21,7 @@ namespace ImportPOC2.Processors
             PriceGridMaps = new List<PriceGridMap>();
         }
 
-        public void ProcessPriceRow(ProductRow sheetRow, Radar.Models.Product.Product productModel)
+        public void ProcessPriceRow(ProductRow sheetRow, Product productModel)
         {
             //price grids are uniquely identified by criteria 
             //therefore build criteria definition processor
@@ -48,9 +46,18 @@ namespace ImportPOC2.Processors
                 }
                 else
                 {
-                    var csvalueids = _criteriaProcessor.GetCSValuesByCriteriaCode(parseCodeFromPriceCriteria(sheetRow.Base_Price_Criteria_1)).Select(v => v.ID).ToList();
-                    csvalueids.AddRange(_criteriaProcessor.GetCSValuesByCriteriaCode(parseCodeFromPriceCriteria(sheetRow.Base_Price_Criteria_2)).Select(v => v.ID).ToList());
-                    //curGrid = productModel.PriceGrids.Where(g => g.PricingItems.Any(i => csvalueids.Contains(i.CriteriaSetValueId)));
+                    var csvalueids = _criteriaProcessor.GetValuesBySheetSpecification(sheetRow.Base_Price_Criteria_1);
+                    if (!string.IsNullOrWhiteSpace(sheetRow.Base_Price_Criteria_2))
+                    {
+                        csvalueids.AddRange(_criteriaProcessor.GetValuesBySheetSpecification(sheetRow.Base_Price_Criteria_2));
+                    }
+
+                    if (csvalueids.Any())
+                    {
+                        //var matchingGrids = productModel.PriceGrids.Where(g => g.PricingItems.Any(i => csvalueids.Contains(i.CriteriaSetValueId)));
+                        int x = 0;
+                    }
+
                 }
 
                 if (curGrid != null)
@@ -94,24 +101,6 @@ namespace ImportPOC2.Processors
 
         }
 
-        private string parseCodeFromPriceCriteria(string criteriaDefinition)
-        {
-            var retVal = string.Empty;
-            if (!string.IsNullOrWhiteSpace(criteriaDefinition))
-            {
-                var tmp = criteriaDefinition.Split(':');
-                if (tmp.Length == 2)
-                {
-                    if (tmp[0].Trim().Length == 4)
-                    {
-                        //it "appears" to be a valid code, send it back;
-                        retVal = tmp[0].Trim();
-                    }
-                }
-            }
-
-            return retVal;
-        }
 
         private void fillBasePricesFromSheet(ICollection<Price> collection, ProductRow sheetRow)
         {

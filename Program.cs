@@ -10,7 +10,6 @@ using Radar.Models;
 using Radar.Models.Criteria;
 using Radar.Models.Product;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Configuration;
@@ -21,7 +20,6 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.RegularExpressions;
 using Constants = Radar.Core.Common.Constants;
-using CriteriaSetCodeValue = Radar.Models.Criteria.CriteriaSetCodeValue;
 using CriteriaSetValue = Radar.Models.Criteria.CriteriaSetValue;
 using MediaCitation = Radar.Models.Company.MediaCitation;
 using MediaCitationReference = Radar.Models.Company.MediaCitationReference;
@@ -834,12 +832,14 @@ namespace ImportPOC2
         {
             if (!string.IsNullOrWhiteSpace(_curXid))
             {
+                _log.DebugFormat("staring product {0}", _curXid);
                 //using current XID, check if product exists, otherwise create new empty model 
                 _currentProduct = getProductByXid() ?? new Product { CompanyId = _companyId };
                 _firstRowForProduct = true;
                 _hasErrors = false;
                 _criteriaProcessor = new CriteriaProcessor(_currentProduct);
                 _priceProcessor = new PriceProcessor(_criteriaProcessor);
+
             }
         }
 
@@ -1270,13 +1270,13 @@ namespace ImportPOC2
         }
 
         private static void genericProcessMaterial(string material, string materialAlias, string criteriaCode, MATERIAL_FORMAT materialFormat, IEnumerable<MajorCodeValueGroup> lookup)
-        {            
+        {
             var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
             var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
             var validMaterial = GetLookupMaterial(material, materialAlias, lookup);
 
             if (validMaterial != null)
-            {                       
+            {
                 var materialCSV = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), materialAlias, StringComparison.CurrentCultureIgnoreCase));
                 var setCodeValueId = validMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
                 //add new value if it doesn't exists
@@ -1287,7 +1287,7 @@ namespace ImportPOC2
                 else
                 {
                     switch (materialFormat)
-                    { 
+                    {
                         case MATERIAL_FORMAT.SINGLE:
                             materialCSV.CriteriaSetCodeValues.FirstOrDefault().SetCodeValueId = setCodeValueId;
                             break;
@@ -1313,215 +1313,15 @@ namespace ImportPOC2
                             break;
                         case MATERIAL_FORMAT.COMBO_BLEND:
                             break;
-                    }                            
-                }                      
-            }
-            else
-            {
-                //log batch error
-                addValidationError(criteriaCode, material);
-                _hasErrors = true;
-            }               
-        }
-
-        { 
-            SINGLE,
-            COMBO,
-            BLEND,
-            COMBO_BLEND
-        }
-
-        private static MATERIAL_FORMAT GetMaterialFormat(string text)
-        {
-            MATERIAL_FORMAT format = MATERIAL_FORMAT.SINGLE;
-            var isCombo = text.ToLower().Contains("combo");
-            var isBlend = text.ToLower().Contains("blend");
-
-            if (isCombo && !isBlend)
-            {
-                format = MATERIAL_FORMAT.COMBO;
-            }
-            else if (!isCombo && isBlend)
-            {
-                format = MATERIAL_FORMAT.BLEND;
-            }
-            else if (isCombo && isBlend)
-            {
-                format = MATERIAL_FORMAT.COMBO_BLEND;
-            }
-
-            return format;
-        }
-
-        private static MajorCodeValueGroup GetLookupMaterial(string materialName, string materialAlias, IEnumerable<MajorCodeValueGroup> lookup)
-        {
-            var validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialAlias, StringComparison.InvariantCultureIgnoreCase));
-
-            if (validMaterial == null)
-            {
-                if (materialName != materialAlias)
-                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialName, StringComparison.InvariantCultureIgnoreCase));
-
-                if (validMaterial == null) // Material is not found set group to Other
-                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, "Other", StringComparison.InvariantCultureIgnoreCase));
-            }
-
-            return validMaterial;
-        }
-
-        private static void genericProcessMaterial(string material, string materialAlias, string criteriaCode, MATERIAL_FORMAT materialFormat, IEnumerable<MajorCodeValueGroup> lookup)
-        {            
-            var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
-            var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-            var validMaterial = GetLookupMaterial(material, materialAlias, lookup);
-
-            if (validMaterial != null)
-            {                       
-                var materialCSV = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), materialAlias, StringComparison.CurrentCultureIgnoreCase));
-                var setCodeValueId = validMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
-                //add new value if it doesn't exists
-                if (materialCSV == null)
-                {
-                    _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, setCodeValueId);
+                    }
                 }
-                else
-                {
-                    switch (materialFormat)
-                    { 
-                        case MATERIAL_FORMAT.SINGLE:
-                            materialCSV.CriteriaSetCodeValues.FirstOrDefault().SetCodeValueId = setCodeValueId;
-                            break;
-                        case MATERIAL_FORMAT.COMBO:
-                            var cscv = materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == setCodeValueId);
-                            if (cscv == null)
-                            {
-                                var newCscv = new CriteriaSetCodeValue
-                                {
-                                    CriteriaSetValueId = materialCSV.ID,
-                                    SetCodeValueId = setCodeValueId,
-                                    ID = Utils.IdGenerator.getNextid()
-                                };
-
-                                materialCSV.CriteriaSetCodeValues.Add(newCscv);
-                            }
-                            else
-                            {
-                                cscv.SetCodeValueId = setCodeValueId;
-                            }
-                            break;
-                        case MATERIAL_FORMAT.BLEND:
-                            break;
-                        case MATERIAL_FORMAT.COMBO_BLEND:
-                            break;
-                    }                            
-                }                      
             }
             else
             {
                 //log batch error
                 addValidationError(criteriaCode, material);
                 _hasErrors = true;
-            }               
-        }
-
-        { 
-            SINGLE,
-            COMBO,
-            BLEND,
-            COMBO_BLEND
-        }
-
-        private static MATERIAL_FORMAT GetMaterialFormat(string text)
-        {
-            MATERIAL_FORMAT format = MATERIAL_FORMAT.SINGLE;
-            var isCombo = text.ToLower().Contains("combo");
-            var isBlend = text.ToLower().Contains("blend");
-
-            if (isCombo && !isBlend)
-            {
-                format = MATERIAL_FORMAT.COMBO;
             }
-            else if (!isCombo && isBlend)
-            {
-                format = MATERIAL_FORMAT.BLEND;
-            }
-            else if (isCombo && isBlend)
-            {
-                format = MATERIAL_FORMAT.COMBO_BLEND;
-            }
-
-            return format;
-        }
-
-        private static MajorCodeValueGroup GetLookupMaterial(string materialName, string materialAlias, IEnumerable<MajorCodeValueGroup> lookup)
-        {
-            var validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialAlias, StringComparison.InvariantCultureIgnoreCase));
-
-            if (validMaterial == null)
-            {
-                if (materialName != materialAlias)
-                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialName, StringComparison.InvariantCultureIgnoreCase));
-
-                if (validMaterial == null) // Material is not found set group to Other
-                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, "Other", StringComparison.InvariantCultureIgnoreCase));
-            }
-
-            return validMaterial;
-        }
-
-        private static void genericProcessMaterial(string material, string materialAlias, string criteriaCode, MATERIAL_FORMAT materialFormat, IEnumerable<MajorCodeValueGroup> lookup)
-        {            
-            var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
-            var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-            var validMaterial = GetLookupMaterial(material, materialAlias, lookup);
-
-            if (validMaterial != null)
-            {                       
-                var materialCSV = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), materialAlias, StringComparison.CurrentCultureIgnoreCase));
-                var setCodeValueId = validMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
-                //add new value if it doesn't exists
-                if (materialCSV == null)
-                {
-                    _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, setCodeValueId);
-                }
-                else
-                {
-                    switch (materialFormat)
-                    { 
-                        case MATERIAL_FORMAT.SINGLE:
-                            materialCSV.CriteriaSetCodeValues.FirstOrDefault().SetCodeValueId = setCodeValueId;
-                            break;
-                        case MATERIAL_FORMAT.COMBO:
-                            var cscv = materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == setCodeValueId);
-                            if (cscv == null)
-                            {
-                                var newCscv = new CriteriaSetCodeValue
-                                {
-                                    CriteriaSetValueId = materialCSV.ID,
-                                    SetCodeValueId = setCodeValueId,
-                                    ID = Utils.IdGenerator.getNextid()
-                                };
-
-                                materialCSV.CriteriaSetCodeValues.Add(newCscv);
-                            }
-                            else
-                            {
-                                cscv.SetCodeValueId = setCodeValueId;
-                            }
-                            break;
-                        case MATERIAL_FORMAT.BLEND:
-                            break;
-                        case MATERIAL_FORMAT.COMBO_BLEND:
-                            break;
-                    }                            
-                }                      
-            }
-            else
-            {
-                //log batch error
-                addValidationError(criteriaCode, material);
-                _hasErrors = true;
-            }               
         }
 
         private static void processThemes(string text)
@@ -2584,6 +2384,7 @@ namespace ImportPOC2
                 {
                     //add "no pub" attribute to radar POST
                 }
+                _log.DebugFormat("completed work with product {0}", _curXid);
             }
         }
 
@@ -2724,8 +2525,8 @@ namespace ImportPOC2
                                 text = _stringTable.SharedStringTable.ElementAt(int.Parse(text)).InnerText;
                             }
                             break;
-                        //case CellValues.String:
-                        //    text = c.CellValue.InnerText;
+                            //case CellValues.String:
+                            //    text = c.CellValue.InnerText;
                         case CellValues.Boolean:
                             switch (text)
                             {
@@ -2741,6 +2542,14 @@ namespace ImportPOC2
                     }
                 }
             }
+            else
+            {
+                if (c.InlineString != null)
+                {
+                    text = c.InlineString.InnerText;
+                }
+            }
+
             return text;
         }
 

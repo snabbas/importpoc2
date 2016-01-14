@@ -485,6 +485,7 @@ namespace ImportPOC2
         }
 
         private static List<MajorCodeValueGroup> _materialLookup = null;
+
         public static List<MajorCodeValueGroup> MaterialLookup
         {
             get
@@ -504,6 +505,7 @@ namespace ImportPOC2
         }
 
         private static List<CodeDescriptionLookUp> _shipperbillsByLookup = null;
+
         public static List<CodeDescriptionLookUp> ShipperbillsByLookup
         {
             get
@@ -522,43 +524,7 @@ namespace ImportPOC2
             set { _shipperbillsByLookup = value; }
         }
 
-        private static List<MajorCodeValueGroup> _materialLookup = null;
-        public static List<MajorCodeValueGroup> MaterialLookup
-        {
-            get
-            {
-                if (_materialLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/materials").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _materialLookup = JsonConvert.DeserializeObject<List<MajorCodeValueGroup>>(content);
-                    }
-                }
-                return _materialLookup;
-            }
-            set { _materialLookup = value; }
-        }
-
-        private static List<CodeDescriptionLookUp> _shipperbillsByLookup = null;
-        public static List<CodeDescriptionLookUp> ShipperbillsByLookup
-        {
-            get
-            {
-                if (_materialLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/shipper_bills_by").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _shipperbillsByLookup = JsonConvert.DeserializeObject<List<CodeDescriptionLookUp>>(content);
-                    }
-                }
-                return _shipperbillsByLookup;
-            }
-            set { _shipperbillsByLookup = value; }
-        }
+        
 
         private static List<CriteriaItem> _sizeTypes = null;
         private static List<GenericLookUp> _sizesLookup = null;
@@ -643,51 +609,12 @@ namespace ImportPOC2
             }
             set { _sizesIdsLookup = value; }
         }
-
-        private static List<MajorCodeValueGroup> _materialLookup = null;
-
-        public static List<MajorCodeValueGroup> MaterialLookup
-        {
-            get
-            {
-                if (_materialLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/materials").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _materialLookup = JsonConvert.DeserializeObject<List<MajorCodeValueGroup>>(content);
-                    }
-                }
-                return _materialLookup;
-            }
-            set { _materialLookup = value; }
-        }
-
-        private static List<CodeDescriptionLookUp> _shipperbillsByLookup = null;
-
-        public static List<CodeDescriptionLookUp> ShipperbillsByLookup
-        {
-            get
-            {
-                if (_materialLookup == null)
-                {
-                    var results = RadarHttpClient.GetAsync("lookup/shipper_bills_by").Result;
-                    if (results.IsSuccessStatusCode)
-                    {
-                        var content = results.Content.ReadAsStringAsync().Result;
-                        _shipperbillsByLookup = JsonConvert.DeserializeObject<List<CodeDescriptionLookUp>>(content);
-                    }
-                }
-                return _shipperbillsByLookup;
-            }
-            set { _shipperbillsByLookup = value; }
-        }
     }
 
     public class StaticLookups
     {
         private static List<CodeValueLookUp> _sizeTypes = null;
+
         public static List<CodeValueLookUp> SizeTypes
         {
             get
@@ -698,20 +625,21 @@ namespace ImportPOC2
                     //the size type value commes from the import template sheet
                     //the collection will be used for doing size type validation
                     _sizeTypes = new List<CodeValueLookUp>();
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "SABR", Value = "Apparel - Bra Sizes" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "SANS", Value = "Apparel - Dress Shirt Sizes" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "SAHU", Value = "Apparel - Hosiery/Uniform Sizes" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "SAIT", Value = "Apparel - Infant/Toddler Sizes" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "SAWI", Value = "Apparel - Pants Sizes" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "SSNM", Value = "Standard & Numbered" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "DIMS", Value = "Dimension" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "SVWT", Value = "Volume/Weight" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "CAPS", Value = "Capacity" });
-                    _sizeTypes.Add(new CodeValueLookUp { Code = "SOTH", Value = "Other" });
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "SABR", Value = "Apparel - Bra Sizes"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "SANS", Value = "Apparel - Dress Shirt Sizes"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "SAHU", Value = "Apparel - Hosiery/Uniform Sizes"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "SAIT", Value = "Apparel - Infant/Toddler Sizes"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "SAWI", Value = "Apparel - Pants Sizes"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "SSNM", Value = "Standard & Numbered"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "DIMS", Value = "Dimension"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "SVWT", Value = "Volume/Weight"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "CAPS", Value = "Capacity"});
+                    _sizeTypes.Add(new CodeValueLookUp {Code = "SOTH", Value = "Other"});
                 }
                 return _sizeTypes;
             }
             set { _sizeTypes = value; }
         }
     }
-    
+
+}
