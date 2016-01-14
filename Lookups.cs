@@ -484,6 +484,44 @@ namespace ImportPOC2
             set { _mediaCitations = value; }
         }
 
+        private static List<MajorCodeValueGroup> _materialLookup = null;
+        public static List<MajorCodeValueGroup> MaterialLookup
+        {
+            get
+            {
+                if (_materialLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/materials").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _materialLookup = JsonConvert.DeserializeObject<List<MajorCodeValueGroup>>(content);
+                    }
+                }
+                return _materialLookup;
+            }
+            set { _materialLookup = value; }
+        }
+
+        private static List<CodeDescriptionLookUp> _shipperbillsByLookup = null;
+        public static List<CodeDescriptionLookUp> ShipperbillsByLookup
+        {
+            get
+            {
+                if (_materialLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/shipper_bills_by").Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _shipperbillsByLookup = JsonConvert.DeserializeObject<List<CodeDescriptionLookUp>>(content);
+                    }
+                }
+                return _shipperbillsByLookup;
+            }
+            set { _shipperbillsByLookup = value; }
+        }
+
         private static List<CriteriaItem> _sizeTypes = null;
         private static List<GenericLookUp> _sizesLookup = null;
 

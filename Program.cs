@@ -1324,6 +1324,106 @@ namespace ImportPOC2
             }               
         }
 
+        { 
+            SINGLE,
+            COMBO,
+            BLEND,
+            COMBO_BLEND
+        }
+
+        private static MATERIAL_FORMAT GetMaterialFormat(string text)
+        {
+            MATERIAL_FORMAT format = MATERIAL_FORMAT.SINGLE;
+            var isCombo = text.ToLower().Contains("combo");
+            var isBlend = text.ToLower().Contains("blend");
+
+            if (isCombo && !isBlend)
+            {
+                format = MATERIAL_FORMAT.COMBO;
+            }
+            else if (!isCombo && isBlend)
+            {
+                format = MATERIAL_FORMAT.BLEND;
+            }
+            else if (isCombo && isBlend)
+            {
+                format = MATERIAL_FORMAT.COMBO_BLEND;
+            }
+
+            return format;
+        }
+
+        private static MajorCodeValueGroup GetLookupMaterial(string materialName, string materialAlias, IEnumerable<MajorCodeValueGroup> lookup)
+        {
+            var validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialAlias, StringComparison.InvariantCultureIgnoreCase));
+
+            if (validMaterial == null)
+            {
+                if (materialName != materialAlias)
+                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialName, StringComparison.InvariantCultureIgnoreCase));
+
+                if (validMaterial == null) // Material is not found set group to Other
+                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, "Other", StringComparison.InvariantCultureIgnoreCase));
+            }
+
+            return validMaterial;
+        }
+
+        private static void genericProcessMaterial(string material, string materialAlias, string criteriaCode, MATERIAL_FORMAT materialFormat, IEnumerable<MajorCodeValueGroup> lookup)
+        {            
+            var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+            var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+            var validMaterial = GetLookupMaterial(material, materialAlias, lookup);
+
+            if (validMaterial != null)
+            {                       
+                var materialCSV = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), materialAlias, StringComparison.CurrentCultureIgnoreCase));
+                var setCodeValueId = validMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
+                //add new value if it doesn't exists
+                if (materialCSV == null)
+                {
+                    _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, setCodeValueId);
+                }
+                else
+                {
+                    switch (materialFormat)
+                    { 
+                        case MATERIAL_FORMAT.SINGLE:
+                            materialCSV.CriteriaSetCodeValues.FirstOrDefault().SetCodeValueId = setCodeValueId;
+                            break;
+                        case MATERIAL_FORMAT.COMBO:
+                            var cscv = materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == setCodeValueId);
+                            if (cscv == null)
+                            {
+                                var newCscv = new CriteriaSetCodeValue
+                                {
+                                    CriteriaSetValueId = materialCSV.ID,
+                                    SetCodeValueId = setCodeValueId,
+                                    ID = Utils.IdGenerator.getNextid()
+                                };
+
+                                materialCSV.CriteriaSetCodeValues.Add(newCscv);
+                            }
+                            else
+                            {
+                                cscv.SetCodeValueId = setCodeValueId;
+                            }
+                            break;
+                        case MATERIAL_FORMAT.BLEND:
+                            break;
+                        case MATERIAL_FORMAT.COMBO_BLEND:
+                            break;
+                    }                            
+                }                      
+            }
+            else
+            {
+                //log batch error
+                addValidationError(criteriaCode, material);
+                _hasErrors = true;
+            }               
+        }
+
         private static void processThemes(string text)
         {
             //TODO: ensure we this the lookup as generic direct from Lookups object instead of converting here. 
