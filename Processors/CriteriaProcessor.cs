@@ -6,6 +6,7 @@ using Radar.Models.Product;
 using Constants = Radar.Core.Common.Constants;
 using CriteriaSetCodeValue = Radar.Models.Criteria.CriteriaSetCodeValue;
 using CriteriaSetValue = Radar.Models.Criteria.CriteriaSetValue;
+using Radar.Models.Criteria;
 
 namespace ImportPOC2.Processors
 {
@@ -73,7 +74,7 @@ namespace ImportPOC2.Processors
 
         //TODO: can we "detect" what value type code to use instead of passing it in? 
         //TODO: pass in criteria set, it's known from everywhere it is invoked
-        public void CreateNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "")
+        public void CreateNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "", CriteriaSetCodeValueLink childCriteriaSetCodeValue = null)
         {
             var cSet = GetCriteriaSetByCode(criteriaCode, optionName);
 
@@ -93,9 +94,15 @@ namespace ImportPOC2.Processors
             var newCscv = new CriteriaSetCodeValue
             {
                 CriteriaSetValueId = newCsv.ID,
-                SetCodeValueId = setCodeValueId,
-                ID = Utils.IdGenerator.getNextid()
+                SetCodeValueId = setCodeValueId,               
+                ID = Utils.IdGenerator.getNextid(),
+                DisplaySequence = 1,
             };
+
+            if (childCriteriaSetCodeValue != null)
+            {
+                newCscv.ChildCriteriaSetCodeValues.Add(childCriteriaSetCodeValue);
+            }
 
             newCsv.CriteriaSetCodeValues.Add(newCscv);
             cSet.CriteriaSetValues.Add(newCsv);
@@ -219,7 +226,7 @@ namespace ImportPOC2.Processors
             if (entity != null)
             {
                 var exists = false;
-                var csValuesToDelete = new List<CriteriaSetCodeValue>();
+                var cscvToDelete = new List<CriteriaSetCodeValue>();
 
                 entity.CriteriaSetCodeValues.ToList().ForEach(e =>
                 {
@@ -227,14 +234,39 @@ namespace ImportPOC2.Processors
 
                     if (!exists)
                     {
-                        csValuesToDelete.Add(e);
+                        cscvToDelete.Add(e);
                     }
                 });
 
-                csValuesToDelete.ForEach(e =>
+                cscvToDelete.ForEach(e =>
                 {
                     var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault().CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == e.SetCodeValueId);
                     criteriaSet.CriteriaSetValues.FirstOrDefault().CriteriaSetCodeValues.Remove(toDelete);
+                });
+            }
+        }
+
+        public void deleteChildCriteriaSetCodeValues(CriteriaSetCodeValue entity, IEnumerable<long> models, CriteriaSetValue criteriaSetValue)
+        {
+            if (entity != null)
+            {
+                var exists = false;
+                var cscvToDelete = new List<CriteriaSetCodeValueLink>();
+
+                entity.ChildCriteriaSetCodeValues.ToList().ForEach(e =>
+                {
+                    exists = models.Any(m => m == e.ChildCriteriaSetCodeValue.SetCodeValueId);
+
+                    if (!exists)
+                    {
+                        cscvToDelete.Add(e);
+                    }
+                });
+
+                cscvToDelete.ForEach(e =>
+                {
+                    var toDelete = criteriaSetValue.CriteriaSetCodeValues.FirstOrDefault().ChildCriteriaSetCodeValues.FirstOrDefault(scv => scv == e);
+                    criteriaSetValue.CriteriaSetCodeValues.FirstOrDefault().ChildCriteriaSetCodeValues.Remove(toDelete);
                 });
             }
         }
