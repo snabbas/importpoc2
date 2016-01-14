@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
+using ImportPOC2.Utils;
 using Radar.Models.Pricing;
 using Radar.Models.Product;
 
@@ -27,6 +29,9 @@ namespace ImportPOC2.Processors
             //therefore build criteria definition processor
             //use results to determine what grid to consider for updates
             //keep track of grids from sheet vs. grids from product model for removal when all sheet grids have been processed
+
+            //start by building a map using sheet and product grids so we know what exists, what doesn't, etc.
+            /* base prices */
             if (!string.IsNullOrWhiteSpace(sheetRow.Base_Price_Name))
             {
                 //add a base price grid to our map collection
@@ -36,8 +41,8 @@ namespace ImportPOC2.Processors
                     CriteriaList = buildCriteriaList(sheetRow.Base_Price_Criteria_1, sheetRow.Base_Price_Criteria_2),
                     GridName =  sheetRow.Base_Price_Name
                 };
-                PriceGridMaps.Add(newMap);
 
+                //first, let's see if the grid already exists
                 PriceGrid curGrid = null;
                 if (string.IsNullOrWhiteSpace(sheetRow.Base_Price_Criteria_1))
                 {
@@ -46,48 +51,39 @@ namespace ImportPOC2.Processors
                 }
                 else
                 {
-                    var csvalueids = _criteriaProcessor.GetValuesBySheetSpecification(sheetRow.Base_Price_Criteria_1);
+                    //since we have criteria, we need to use it to find a grid
+                    //pull the criteria values, and look for a grid that has the same exact value list. 
+                    //otherwise we will treat it as a new grid. 
+                    var csValueList = _criteriaProcessor.GetValuesBySheetSpecification(sheetRow.Base_Price_Criteria_1);
                     if (!string.IsNullOrWhiteSpace(sheetRow.Base_Price_Criteria_2))
                     {
-                        csvalueids.AddRange(_criteriaProcessor.GetValuesBySheetSpecification(sheetRow.Base_Price_Criteria_2));
+                        csValueList.AddRange(_criteriaProcessor.GetValuesBySheetSpecification(sheetRow.Base_Price_Criteria_2));
                     }
 
-                    if (csvalueids.Any())
+                    //with the list of CSValue IDs, find a grid that matches them all
+                    if (csValueList.Any())
                     {
-                        //var matchingGrids = productModel.PriceGrids.Where(g => g.PricingItems.Any(i => csvalueids.Contains(i.CriteriaSetValueId)));
-                        int x = 0;
+                        var justIds = csValueList.Select(v => v.ID);
+                        
+                        var matchingGrids = productModel.PriceGrids.Where(g => g.IsBasePrice && g.PricingItems.All(i => justIds.Contains(i.CriteriaSetValueId))).ToList();
+
+                        if (matchingGrids.Any())
+                        {
+                            curGrid = matchingGrids.First();
+                        }
                     }
-
                 }
+                //if it exists, put the ID into our mapping table; otherwise use a unique ID to represent a new Grid. 
+                newMap.TargetGridId = curGrid != null ? curGrid.ID : IdGenerator.getNextid();
 
-                if (curGrid != null)
-                {
-                    //found it by name... anything special to do here? 
-                    
-                }
-                else
-                {
-                    //assume that it is new here. 
-                    curGrid = new PriceGrid
-                    {
-                        //Currency = "USD", //TODO: need default currency for product not a constant here
-                        Description = sheetRow.Base_Price_Name,
-                        IsBasePrice = true,
-                        ID = Utils.IdGenerator.getNextid(), 
-                        Prices = new Collection<Price>(),
-                        PricingItems = new Collection<PricingItem>(),
-                    };
+                //hold onto the data in the model format so we can quickly build grids for the product as needed.
+                fillBasePricesFromSheet(newMap.Prices, sheetRow);
+                fillPricingItemsFromSheet(newMap.PricingItems, sheetRow);
 
-
-                    productModel.PriceGrids.Add(curGrid);
-                }
-                curGrid.PriceIncludes = sheetRow.Price_Includes;
-                curGrid.DisplaySequence = _baseGridCount++;
-                curGrid.IsQUR = string.Equals(sheetRow.QUR_Flag, "Y", StringComparison.InvariantCultureIgnoreCase);
-
-                fillBasePricesFromSheet(curGrid.Prices, sheetRow);
-
+                PriceGridMaps.Add(newMap);
             }
+
+            /* upcharges */
             if (!string.IsNullOrWhiteSpace(sheetRow.Upcharge_Name))
             {
                 var newMap = new PriceGridMap
@@ -98,43 +94,75 @@ namespace ImportPOC2.Processors
                 };
                 PriceGridMaps.Add(newMap);
             }
-
         }
 
+        private void fillPricingItemsFromSheet(ICollection<PricingItem> collection, ProductRow sheetRow)
+        {
+            var csValueList = _criteriaProcessor.GetValuesBySheetSpecification(sheetRow.Base_Price_Criteria_1);
+
+            foreach (var value in csValueList)
+            {
+                var item = new PricingItem
+                {
+                    CriteriaSetValueId = value.ID,
+                    ID = IdGenerator.getNextid()
+                    //TODO: what other item values do we need here?
+                };
+                collection.Add(item);
+            }
+        }
 
         private void fillBasePricesFromSheet(ICollection<Price> collection, ProductRow sheetRow)
         {
-            //TODO: using sheetrow, build a price object, then test against collection for add/change
-            // does it make sense to use collection length and # of sheet cols to determine new? 
             var newPrice = createPrice(sheetRow.Q1, sheetRow.P1, sheetRow.D1);
+            if (newPrice!=null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q2, sheetRow.P2, sheetRow.D2);
+            if (newPrice != null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q3, sheetRow.P3, sheetRow.D3);
+            if (newPrice != null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q4, sheetRow.P4, sheetRow.D4);
+            if (newPrice != null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q5, sheetRow.P5, sheetRow.D5);
+            if (newPrice != null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q6, sheetRow.P6, sheetRow.D6);
+            if (newPrice != null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q7, sheetRow.P7, sheetRow.D7);
+            if (newPrice != null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q8, sheetRow.P8, sheetRow.D8);
+            if (newPrice != null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q9, sheetRow.P9, sheetRow.D9);
+            if (newPrice != null)
+                collection.Add(newPrice);
             newPrice = createPrice(sheetRow.Q10, sheetRow.P10, sheetRow.D10);
+            if (newPrice != null)
+                collection.Add(newPrice);
         }
 
         private Price createPrice(string qty, string price, string discountCode)
         {
             Price newPrice = null;
-            if (!string.IsNullOrWhiteSpace(qty) && !string.IsNullOrWhiteSpace(price) )//&& !string.IsNullOrWhiteSpace(discountCode))
+            if (!string.IsNullOrWhiteSpace(qty) && !string.IsNullOrWhiteSpace(price)) //&& !string.IsNullOrWhiteSpace(discountCode))
             {
-                int parsedQty = 0;
-                Int32.TryParse(qty, out parsedQty);
-
+                var parsedQty = 0;
                 decimal parsedPrice = 0;
-                decimal.TryParse(price, out parsedPrice);
 
-                newPrice = new Price
+                if (Int32.TryParse(qty, out parsedQty) && decimal.TryParse(price, out parsedPrice))
                 {
-                    Quantity = parsedQty,
-                    ListPrice = parsedPrice,
-                    DiscountRate = getDiscountByCode(discountCode)
-                };
+                    newPrice = new Price
+                    {
+                        Quantity = parsedQty,
+                        ListPrice = parsedPrice,
+                        DiscountRate = getDiscountByCode(discountCode)
+                    };
+                }
             }
 
             return newPrice;
@@ -182,12 +210,30 @@ namespace ImportPOC2.Processors
         /// this will perform final pricing actions, such as removing price grids from the product that 
         /// were not specified in the sheet.
         /// </summary>
-        public void FinalizeProductPricing()
+        public void FinalizeProductPricing(Product currentProduct)
         {
             //compare price grid map to current product price grid list
-            int x = 0;
-            _baseGridCount = 0;
-            _upchargeGridCount = 0;
+
+            var basePriceMap = PriceGridMaps.Where(m => m.IsBasePrice).ToList();
+            var upchargeMap = PriceGridMaps.Where(m => !m.IsBasePrice).ToList();
+
+            var productPrices = currentProduct.PriceGrids.Where(g => g.IsBasePrice).ToList();
+            var productUpcharges = currentProduct.PriceGrids.Where(g => !g.IsBasePrice).ToList();
+
+            //update base prices as needed
+
+            //update upcharges as needed. 
+
+            //if a grid (upcharges or base prices) is on the product but not in the map, it needs to be deleted
+            var priceGridIdsToDelete = productPrices.Select(g => g.ID).Except(basePriceMap.Select(m => m.TargetGridId)).ToList();
+            priceGridIdsToDelete.AddRange(productUpcharges.Select(g => g.ID).Except(upchargeMap.Select(m => m.TargetGridId)).ToList());
+            
+            priceGridIdsToDelete.ForEach(d =>
+            {
+                var existing = productPrices.FirstOrDefault(p => p.ID == d);
+                currentProduct.PriceGrids.Remove(existing);
+            });
+            
         }
     }
 }

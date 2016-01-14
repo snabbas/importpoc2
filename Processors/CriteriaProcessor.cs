@@ -182,6 +182,15 @@ namespace ImportPOC2.Processors
                 // match 'em up
 
                 var allcsvs = GetCSValuesByCriteriaCode(code);
+                var valueDefinitions = val.Split(',').Select(v => v.Trim()).ToList();
+                valueDefinitions.ForEach(d =>
+                {
+                    var tmp = allcsvs.FirstOrDefault(v => string.Equals(v.FormatValue.Trim(), d, StringComparison.CurrentCultureIgnoreCase));
+                    if (tmp != null)
+                    {
+                        retVal.Add(tmp);
+                    }
+                });
 
             }
             return retVal;

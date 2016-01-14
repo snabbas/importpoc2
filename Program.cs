@@ -153,6 +153,7 @@ namespace ImportPOC2
                             _publishCurrentProduct = true;
                         }
                     }
+                    finishProduct();
 
                     //processing: 
                     // map column positions to field names for this sheet
@@ -2573,7 +2574,7 @@ namespace ImportPOC2
             // we "send" the product to Radar for processing. 
             if (_currentProduct != null && !_hasErrors)
             {
-                _priceProcessor.FinalizeProductPricing();
+                _priceProcessor.FinalizeProductPricing(_currentProduct);
                 //TODO: other repeatable sets will "finalize" here as well. 
 
                 //var x = _currentProduct;
@@ -2582,6 +2583,7 @@ namespace ImportPOC2
                     //add "no pub" attribute to radar POST
                 }
                 _log.DebugFormat("completed work with product {0}", _curXid);
+                _currentProduct = null;
             }
         }
 
