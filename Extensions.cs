@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 
@@ -46,6 +47,14 @@ namespace ImportPOC2
             }
 
             return retVal;
+        }
+
+        public static bool IsNumeric(this string value)
+        {
+            double retNum;
+
+            bool isNum = Double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.NumberFormatInfo.InvariantInfo, out retNum);
+            return isNum;
         }
     }
 
