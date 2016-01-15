@@ -38,7 +38,6 @@ namespace ImportPOC2
         private static IQueryable<Radar.Core.Models.Import.Template> _mapping;
         private static string _curXid;
         private static int _companyId;
-        private static Batch _curBatch;
         private static UowPRODTask _prodTask;
         private static HttpClient _radarHttpClient;
         private static Product _currentProduct;
@@ -50,6 +49,7 @@ namespace ImportPOC2
         private static ProductRow _curProdRow;
         private static PriceProcessor _priceProcessor;
         private static CriteriaProcessor _criteriaProcessor;
+
 
         static void Main(string[] args)
         {
@@ -86,6 +86,7 @@ namespace ImportPOC2
             {
                 //go get column positions from DB. 
                 _prodTask = new UowPRODTask();
+                BatchProcessor.ProdTask = _prodTask;
                 _mapping = _prodTask.Template.GetAllWithInclude(t => t.TemplateMapping)
                     .Where(t => t.AuditStatusCode == Constants.StatusCode.Audit.ACTIVE)
                     .Select(t => t);
@@ -112,16 +113,18 @@ namespace ImportPOC2
             //initizations
             //get batch: 
             var batchId = getBatchId(xlsxFile);
-            _curBatch = getBatchById(batchId);
-            //as batch has changed, so has company ID, so ensure company-specific lookups are appropriately updated
-            Lookups.CurrentCompanyId = _companyId;
-
-            if (_curBatch == null)
+            _companyId = 0;
+            //_curBatch = getBatchById(batchId);
+            if (!BatchProcessor.SetCurrentBatch(batchId))
             {
                 _log.ErrorFormat("unable to find batch {0}", batchId);
             }
             else
             {
+                //as file/batch has changed, so has company ID, so ensure company-specific lookups are appropriately updated
+                _companyId = BatchProcessor.GetCompanyIdFromCurrentBatch();
+                Lookups.CurrentCompanyId = _companyId;
+
                 //open file
                 using (var document = SpreadsheetDocument.Open(xlsxFile, false))
                 {
@@ -171,23 +174,6 @@ namespace ImportPOC2
                     // if column has data, update viewmodel appropriately
                 }
             }
-        }
-
-        private static Batch getBatchById(long batchId)
-        {
-            var batch = _prodTask.Batch.GetAllWithInclude(
-                t => t.BatchDataSources,
-                t => t.BatchErrorLogs,
-                t => t.BatchProducts)
-                .FirstOrDefault(b => b.BatchId == batchId);
-
-            if (batch != null && batch.CompanyId.HasValue)
-            {
-                _companyId = (int)batch.CompanyId.Value;
-            }
-
-            return batch;
-
         }
 
         private static long getBatchId(string xlsxFile)
@@ -249,7 +235,7 @@ namespace ImportPOC2
 
         private static void processCurrentProdRow()
         {
-            var productLevelFieldsProcessor = new ProductLevelFieldsProcessor(_curProdRow, _firstRowForProduct, _currentProduct, _publishCurrentProduct, _curBatch);
+            var productLevelFieldsProcessor = new ProductLevelFieldsProcessor(_curProdRow, _firstRowForProduct, _currentProduct, _publishCurrentProduct);
             productLevelFieldsProcessor.ProcessProductLevelFields();
             processSimpleLookups();
             processColorsMaterials();
@@ -286,7 +272,8 @@ namespace ImportPOC2
         {           
             if (string.IsNullOrWhiteSpace(_curProdRow.Size_Group) || string.IsNullOrWhiteSpace(_curProdRow.Size_Values))
             {
-                addValidationError("SIZE", "size group/values must be provided");
+                //TODO: add method for this to batch processor, it's not a lookup message
+                //addValidationError("SIZE", "size group/values must be provided");
                 return;
             }
 
@@ -294,7 +281,7 @@ namespace ImportPOC2
             var sizeType = StaticLookups.SizeTypes.FirstOrDefault(s => s.Value == _curProdRow.Size_Group);
             if (sizeType == null)
             {
-                addValidationError("SIZE", "invalid size group found");
+                BatchProcessor.AddLookupValidationError("SIZE", "invalid size group found");
                 return;
             }
 
@@ -834,6 +821,7 @@ namespace ImportPOC2
             if (!string.IsNullOrWhiteSpace(_curXid))
             {
                 _log.DebugFormat("starting product {0}", _curXid);
+                IdGenerator.resetIds();//just start over, it's a new product. 
                 //using current XID, check if product exists, otherwise create new empty model 
                 _currentProduct = getProductByXid() ?? 
                     new Product
@@ -845,6 +833,7 @@ namespace ImportPOC2
                 _hasErrors = false;
                 _criteriaProcessor = new CriteriaProcessor(_currentProduct);
                 _priceProcessor = new PriceProcessor(_criteriaProcessor);
+                BatchProcessor.CurrentXid = _curXid;
             }
         }
 
@@ -898,7 +887,7 @@ namespace ImportPOC2
             {
                 //split the values, if it's csv 
                 var sheetValueList = text.ConvertToList();
-                var criteriaSet = cs == null ? _criteriaProcessor.GetCriteriaSetByCode(criteriaCode) : cs;                                             
+                var criteriaSet = cs ?? _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);                                             
                 var existingCsValues = criteriaSet.CriteriaSetValues.ToList();
 
                 var sheetCodeValuesToValidate = parseByCriteriaCode(criteriaCode, sheetValueList);
@@ -1236,7 +1225,7 @@ namespace ImportPOC2
                     else
                     {
                         //log batch error
-                        addValidationError(criteriaCode, value);
+                        BatchProcessor.AddLookupValidationError(criteriaCode, value);
                         _hasErrors = true;
                     }
                 });
@@ -1257,7 +1246,7 @@ namespace ImportPOC2
                 var validValues = new[] { "Y", "N" };
                 if (!string.IsNullOrWhiteSpace(splittedValue.CodeValue) && !validValues.Contains(splittedValue.CodeValue))
                 {
-                    addValidationError("GNER", "invalid value for Samples");
+                    BatchProcessor.AddLookupValidationError("GNER", "invalid value for Samples");
                     return;
                 }
 
@@ -1367,7 +1356,7 @@ namespace ImportPOC2
                     else
                     {
                         //log batch error
-                        addValidationError(criteriaCode, unit);
+                        BatchProcessor.AddIncorrectFormatError(criteriaCode, unit);
                         _hasErrors = true;
                     }
                 }
@@ -1452,7 +1441,7 @@ namespace ImportPOC2
                     else
                     {
                         //log batch error
-                        addValidationError(criteriaCode, unit);
+                        BatchProcessor.AddLookupValidationError(criteriaCode, string.Format("Unit {0}", unit));
                         _hasErrors = true;
                     }
                 }
@@ -1559,6 +1548,8 @@ namespace ImportPOC2
             genericProcessImprintMethods(text, Constants.CriteriaCodes.ImprintMethod, Lookups.ImprintMethodsLookup);                                   
         }
 
+        //TODO: personalization also allows "Y" instead of a text value that matches lookup
+        //TODO: this must be updated to support "Y" or lookup value
         private static void processPersonalization(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -1629,7 +1620,7 @@ namespace ImportPOC2
                 var validValues = new[] { "Y", "N" };
                 if (!string.IsNullOrWhiteSpace(soldUnimprinted) && !validValues.Contains(soldUnimprinted))
                 {
-                    addValidationError("GNER", "invalid value for Sold Unimprinted");
+                    BatchProcessor.AddIncorrectFormatError("IMMD", "Sold Unimprinted");
                     return;
                 }
 
@@ -1833,7 +1824,7 @@ namespace ImportPOC2
                 var validValues = new[] { "Y", "N" };
                 if (!string.IsNullOrWhiteSpace(splittedValue.CodeValue) && !validValues.Contains(splittedValue.CodeValue))
                 {
-                    addValidationError("GNER", "invalid value for Process Rush Service");
+                    BatchProcessor.AddIncorrectFormatError("RUSH", "Rush Service");
                     return;
                 }
 
@@ -1966,7 +1957,7 @@ namespace ImportPOC2
                 var validValues = new[] { "Y", "N" };
                 if (!string.IsNullOrWhiteSpace(splittedValue.CodeValue) && !validValues.Contains(splittedValue.CodeValue))
                 {
-                    addValidationError("GNER", "invalid value for Process Same Day Service");
+                    BatchProcessor.AddIncorrectFormatError("SDRU", "Same Day Service");
                     return;
                 }
 
@@ -2104,7 +2095,7 @@ namespace ImportPOC2
                     else
                     {
                         //log batch error
-                        addValidationError("LNNM", linename);
+                        BatchProcessor.AddLookupValidationError("LNNM", linename);
                         _hasErrors = true;
                     }
                 });
@@ -2361,7 +2352,7 @@ namespace ImportPOC2
             else
             {
                 //log batch error
-                addValidationError(criteriaCode, material);
+                BatchProcessor.AddLookupValidationError(criteriaCode, material);
                 _hasErrors = true;
             }
         }
@@ -2429,7 +2420,7 @@ namespace ImportPOC2
             }
             else
             {
-                addValidationError(criteriaCode, string.Join(materials, "=", materialAlias));
+                BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Join(materials, "=", materialAlias));
                 _hasErrors = true;
             }           
         }
@@ -2480,7 +2471,7 @@ namespace ImportPOC2
             }
             else
             {
-                addValidationError(criteriaCode, materials + "=" + materialAlias);
+                BatchProcessor.AddIncorrectFormatError(criteriaCode, materials + "=" + materialAlias);
                 _hasErrors = true;
             }            
         }
@@ -2540,7 +2531,7 @@ namespace ImportPOC2
             }
             else
             {
-                addValidationError(criteriaCode, string.Join(materials, "=", materialAlias));
+                BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Join(materials, "=", materialAlias));
                 _hasErrors = true;
             }            
         }
@@ -2638,7 +2629,7 @@ namespace ImportPOC2
             }
             else
             {
-                addValidationError(criteriaCode, string.Join(colors, "=", colorAlias));
+                BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Join(colors, "=", colorAlias));
                 _hasErrors = true;
             }   
         }     
@@ -2687,7 +2678,7 @@ namespace ImportPOC2
             else
             {
                 //log batch error
-                addValidationError(criteriaCode, color);
+                BatchProcessor.AddLookupValidationError(criteriaCode, color);
                 _hasErrors = true;
             }
         }
@@ -2764,18 +2755,28 @@ namespace ImportPOC2
         {
             //if we've started a radar model, 
             // we "send" the product to Radar for processing. 
-            if (_currentProduct != null && !_hasErrors)
+            if (_currentProduct != null )
             {
                 _priceProcessor.FinalizeProductPricing(_currentProduct);
                 //TODO: other repeatable sets will "finalize" here as well. 
 
-                //var x = _currentProduct;
-                if (!_publishCurrentProduct)
+                if (!_hasErrors)
                 {
-                    //add "no pub" attribute to radar POST
+                    if (!_publishCurrentProduct)
+                    {
+                        //add "no pub" attribute to radar POST
+                    }
+                    _log.DebugFormat("product xid {0} posted to radar - results: TBD", _curXid);
                 }
+                else
+                {
+                    _log.WarnFormat("product xid {0} has errors and was not updated", _curXid);
+                    BatchProcessor.OutputBatchErrors(_log);
+                }
+
                 _log.DebugFormat("completed work with product {0}", _curXid);
                 _currentProduct = null;
+                _curXid = string.Empty;
             }
         }
 
@@ -2949,20 +2950,8 @@ namespace ImportPOC2
             return text;
         }
 
-        private static void addValidationError(string criteriaCode, string info)
-        {
-            //TODO: criteria code will not always correctly map to field codes
-            //TODO: where did "ILUV" error code come from? 
 
-            _curBatch.BatchErrorLogs.Add(new BatchErrorLog
-            {
-                FieldCode = criteriaCode,
-                ErrorMessageCode = "ILUV",
-                AdditionalInfo = info,
-                ProductId = _currentProduct.ID,
-                ExternalProductId = _curXid
-            });
-        }
+
 
         private static void logit(string message)
         {

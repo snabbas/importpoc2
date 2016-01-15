@@ -1,8 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Linq;
-using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
 using ImportPOC2.Utils;
 using Radar.Models.Pricing;
@@ -38,7 +36,6 @@ namespace ImportPOC2.Processors
                 var newMap = new PriceGridMap
                 {
                     IsBasePrice =  true,
-                    CriteriaList = buildCriteriaList(sheetRow.Base_Price_Criteria_1, sheetRow.Base_Price_Criteria_2),
                     GridName =  sheetRow.Base_Price_Name
                 };
 
@@ -89,7 +86,6 @@ namespace ImportPOC2.Processors
                 var newMap = new PriceGridMap
                 {
                     IsBasePrice =  false,
-                    CriteriaList = buildCriteriaList(sheetRow.Upcharge_Criteria_1, sheetRow.Upcharge_Criteria_2),
                     GridName = sheetRow.Upcharge_Name
                 };
                 PriceGridMaps.Add(newMap);

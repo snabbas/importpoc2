@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
+using ImportPOC2.Utils;
 using Radar.Models.Product;
 using Constants = Radar.Core.Common.Constants;
 using CriteriaSetCodeValue = Radar.Models.Criteria.CriteriaSetCodeValue;
@@ -49,7 +51,7 @@ namespace ImportPOC2.Processors
             var newCs = new ProductCriteriaSet
             {
                 CriteriaCode = criteriaCode,
-                CriteriaSetId = 0,
+                CriteriaSetId = IdGenerator.getNextid(),
                 ProductId = _currentProduct.ID
             };
 
@@ -86,7 +88,7 @@ namespace ImportPOC2.Processors
                 CriteriaCode = criteriaCode,
                 CriteriaSetId = cSet.CriteriaSetId,
                 Value = value,
-                ID = Utils.IdGenerator.getNextid(),
+                ID = IdGenerator.getNextid(),
                 ValueTypeCode = valueTypeCode,
                 CriteriaValueDetail = valueDetail,
                 //for most cases this would be the same as value field except in cases where value is an object and not a string
@@ -99,7 +101,7 @@ namespace ImportPOC2.Processors
             {
                 CriteriaSetValueId = newCsv.ID,
                 SetCodeValueId = setCodeValueId,               
-                ID = Utils.IdGenerator.getNextid(),
+                ID = IdGenerator.getNextid(),
                 CodeValueDetail = codeValueDetail,
                 DisplaySequence = 1,
             };
@@ -366,7 +368,8 @@ namespace ImportPOC2.Processors
                 new ProductConfiguration
             {
                 IsDefault = true, 
-                ProductId = _currentProduct.ID
+                ProductId = _currentProduct.ID,
+                ProductCriteriaSets = new Collection<ProductCriteriaSet>()
             };
 
             return defaultProdConfig;
@@ -674,7 +677,6 @@ namespace ImportPOC2.Processors
         public string formatSizeDimensionValue(string value)
         {
             var retVal = string.Empty;
-            var format = string.Empty;
 
             var dimSplit = value.Split(';');
             foreach (var str in dimSplit)
@@ -692,20 +694,29 @@ namespace ImportPOC2.Processors
                 if (criteriaAttribute != null)
                 {
                     //work around for feet and inch because they don't give us the format in the sheet 
-                    if (split[2] == "ft")
-                        format = "'";
-                    else if (split[2] == "in")
-                        format = "\"";
-                    else
-                        format = split[2];
+                    string format;
+                    switch (split[2])
+                    {
+                        case "ft":
+                            format = "'";
+                            break;
+                        case "in":
+                            format = "\"";
+                            break;
+                        default:
+                            format = split[2];
+                            break;
+                    }
                                        
                     retVal += split[1] + " " + format + " x ";                    
                 }
-            }            
+            }
 
-            retVal = retVal.Remove(retVal.LastIndexOf(" x "), 3);
+            var lastPos = retVal.LastIndexOf(" x ", StringComparison.Ordinal);
+            if (lastPos > 0)
+                retVal = retVal.Remove(lastPos, 3);
 
-            return retVal; 
+            return retVal;
         }
     }
 }

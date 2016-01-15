@@ -15,16 +15,13 @@ namespace ImportPOC2.Processors
         private readonly bool _firstRowForProduct = false;
         private Product _currentProduct = null;
         private bool _publishCurrentProduct = false;
-        private static int _globalUniqueId = 0;
-        private Batch _currentBatch = null;
 
-        public ProductLevelFieldsProcessor(ProductRow currentProductRow, bool firstRowForProduct, Product currentProduct, bool publishCurrentProduct, Batch currentBatch)
+        public ProductLevelFieldsProcessor(ProductRow currentProductRow, bool firstRowForProduct, Product currentProduct, bool publishCurrentProduct)
         {
             _currentProductRow = currentProductRow;
             _firstRowForProduct = firstRowForProduct;
             _currentProduct = currentProduct;
             _publishCurrentProduct = publishCurrentProduct;
-            _currentBatch = currentBatch;
         }
 
         public void ProcessProductLevelFields()
@@ -207,7 +204,7 @@ namespace ImportPOC2.Processors
                     if (keyObj == null)
                     {
                         //need to add it
-                        var newKeyword = new ProductKeyword { Value = keyword, TypeCode = "HIDD", ID = _globalUniqueId-- };
+                        var newKeyword = new ProductKeyword { Value = keyword, TypeCode = "HIDD", ID = IdGenerator.getNextid() };
                         _currentProduct.ProductKeywords.Add(newKeyword);
                     }
                 });
