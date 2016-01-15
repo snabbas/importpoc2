@@ -29,12 +29,14 @@ namespace ImportPOC2.Processors
             ProductCriteriaSet retVal = null;
             if (!string.IsNullOrWhiteSpace(criteriaCode))
             {
-                var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
+                var prodConfig = getDefaultProdConfig();
 
                 if (prodConfig != null)
                 {
                     var cSets = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();
-                    retVal = !string.IsNullOrWhiteSpace(optionName) ? cSets.FirstOrDefault(c => string.Equals(c.CriteriaDetail, optionName, StringComparison.CurrentCultureIgnoreCase)) : cSets.FirstOrDefault();
+                    retVal = !string.IsNullOrWhiteSpace(optionName) ? 
+                        cSets.FirstOrDefault(c => string.Equals(c.CriteriaDetail, optionName, StringComparison.CurrentCultureIgnoreCase)) : 
+                        cSets.FirstOrDefault();
                 }
 
                 retVal = retVal ?? addCriteriaSet(criteriaCode, optionName);
@@ -56,7 +58,7 @@ namespace ImportPOC2.Processors
                 newCs.CriteriaDetail = optionName;
             }
 
-            var productConfiguration = _currentProduct.ProductConfigurations.FirstOrDefault(cfg => cfg.IsDefault);
+            var productConfiguration = getDefaultProdConfig();
             if (productConfiguration != null)
                 productConfiguration.ProductCriteriaSets.Add(newCs);
 
@@ -329,7 +331,7 @@ namespace ImportPOC2.Processors
         public ProductCriteriaSet getSizeCriteriaSetByCode(string criteriaCode)
         {
             ProductCriteriaSet retVal = null;
-            var prodConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault);
+            var prodConfig = getDefaultProdConfig();
 
             if (prodConfig != null)
             {
@@ -358,9 +360,21 @@ namespace ImportPOC2.Processors
             return retVal;
         }
 
+        private ProductConfiguration getDefaultProdConfig()
+        {
+            var defaultProdConfig = _currentProduct.ProductConfigurations.FirstOrDefault(c => c.IsDefault) ?? 
+                new ProductConfiguration
+            {
+                IsDefault = true, 
+                ProductId = _currentProduct.ID
+            };
+
+            return defaultProdConfig;
+        }
+
         public void removeCriteriaSet(string criteriaCode)
         {
-            var productConfiguration = _currentProduct.ProductConfigurations.FirstOrDefault(cfg => cfg.IsDefault);
+            var productConfiguration = getDefaultProdConfig();
             if (productConfiguration != null)
             {
                 var cs = productConfiguration.ProductCriteriaSets.FirstOrDefault(c => c.CriteriaCode == criteriaCode);

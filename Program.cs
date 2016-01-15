@@ -3,6 +3,7 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
 using ImportPOC2.Models;
 using ImportPOC2.Processors;
+using ImportPOC2.Utils;
 using Newtonsoft.Json;
 using Radar.Core.Models.Batch;
 using Radar.Data;
@@ -834,7 +835,12 @@ namespace ImportPOC2
             {
                 _log.DebugFormat("starting product {0}", _curXid);
                 //using current XID, check if product exists, otherwise create new empty model 
-                _currentProduct = getProductByXid() ?? new Product { CompanyId = _companyId };
+                _currentProduct = getProductByXid() ?? 
+                    new Product
+                    {
+                        CompanyId = _companyId, 
+                        ID = IdGenerator.getNextid()
+                    };
                 _firstRowForProduct = true;
                 _hasErrors = false;
                 _criteriaProcessor = new CriteriaProcessor(_currentProduct);
@@ -2845,7 +2851,12 @@ namespace ImportPOC2
             //var inputValueList = strInputLookups.ConvertToList();
             return (from value in inputValueList
                     let existingLookup = lookupList.Find(l => l.CodeValue == value)
-                    select existingLookup ?? new GenericLookUp { CodeValue = value, ID = null })
+                    select existingLookup ?? 
+                        new GenericLookUp
+                        {
+                            CodeValue = value, 
+                            ID = null
+                        })
                 .ToList();
         }
 
