@@ -30,7 +30,7 @@ using SetCodeValue = Radar.Models.Criteria.SetCodeValue;
 
 namespace ImportPOC2
 {
-    class Program
+    public class Program
     {
         private static SharedStringTablePart _stringTable;
         private static List<string> _sheetColumnsList;
@@ -1223,191 +1223,7 @@ namespace ImportPOC2
                 }
             }
         }
-
-        private enum MATERIAL_FORMAT
-        { 
-            SINGLE,
-            COMBO,
-            BLEND,
-            COMBO_BLEND,
-            COMBO_2_BLEND
-        }
-
-        private static MATERIAL_FORMAT GetMaterialFormat(string text)
-        {
-            MATERIAL_FORMAT format = MATERIAL_FORMAT.SINGLE;
-            var isCombo = text.ToLower().Contains("combo");
-            var isBlend = text.ToLower().Contains("blend");
-
-            if (isCombo && !isBlend)
-            {
-                format = MATERIAL_FORMAT.COMBO;
-            }
-            else if (!isCombo && isBlend)
-            {
-                format = MATERIAL_FORMAT.BLEND;
-            }
-            else if (isCombo && isBlend)
-            {
-                format = MATERIAL_FORMAT.COMBO_BLEND;
-            }
-
-            return format;
-        }
-
-        private static MajorCodeValueGroup GetLookupMaterial(string materialName, string materialAlias, IEnumerable<MajorCodeValueGroup> lookup)
-        {
-            var validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialAlias, StringComparison.InvariantCultureIgnoreCase));
-
-            if (validMaterial == null)
-            {
-                if (materialName != materialAlias)
-                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialName, StringComparison.InvariantCultureIgnoreCase));
-
-                if (validMaterial == null) // Material is not found set group to Other
-                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, "Other", StringComparison.InvariantCultureIgnoreCase));
-            }
-
-            return validMaterial;
-        }
-
-        private static long GetMaterialSetCodeValueId(string name, string alias, IEnumerable<MajorCodeValueGroup> lookup)
-        {
-            var blendMaterial = GetLookupMaterial(name, alias, lookup);
-            return blendMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
-        }
-
-        private static void genericProcessMaterial(string material, string percentage, string materialAlias, string criteriaCode, MATERIAL_FORMAT materialFormat, bool isfirstBlendMaterial, IEnumerable<MajorCodeValueGroup> lookup)
-        {
-            var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
-            var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
-            var validMaterial = GetLookupMaterial(material, materialAlias, lookup);
-
-            if (validMaterial != null)
-            {
-                var materialCSV = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), materialAlias, StringComparison.CurrentCultureIgnoreCase));
-                var setCodeValueId = validMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
-                //add new value if it doesn't exists
-                if (materialCSV == null)
-                {
-                    if (materialFormat == MATERIAL_FORMAT.BLEND || materialFormat == MATERIAL_FORMAT.COMBO_2_BLEND)
-                    {
-                        var blendMaterialcsvId = GetMaterialSetCodeValueId("Blend", string.Empty, lookup);
-                        var criteriaSetCodeValueLink = new CriteriaSetCodeValueLink
-                        {
-                            ChildCriteriaSetCodeValue = new CriteriaSetCodeValue
-                            {
-                                SetCodeValueId = setCodeValueId,
-                                CodeValue = percentage.ToString()
-                            }
-                        };
-                        _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, blendMaterialcsvId, "LIST", "", "", criteriaSetCodeValueLink);
-
-                    }
-                    else
-                    {
-                        _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, setCodeValueId, "LIST");
-                    }
-                }
-                else
-                {
-                    var blendMaterialcsvId = GetMaterialSetCodeValueId("Blend", string.Empty, lookup);
-                    switch (materialFormat)
-                    {
-                        case MATERIAL_FORMAT.SINGLE:
-                            materialCSV.CriteriaSetCodeValues.FirstOrDefault().SetCodeValueId = setCodeValueId;
-                            break;
-                        case MATERIAL_FORMAT.COMBO:
-                            var cscv = materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == setCodeValueId);
-                            if (cscv == null)
-                            {
-                                var newCscv = new CriteriaSetCodeValue
-                                {
-                                    CriteriaSetValueId = materialCSV.ID,
-                                    SetCodeValueId = setCodeValueId,
-                                    ID = Utils.IdGenerator.getNextid(),
-                                    DisplaySequence = 2
-                                };
-
-                                materialCSV.CriteriaSetCodeValues.Add(newCscv);
-                            }                           
-                            break;
-                        case MATERIAL_FORMAT.BLEND:                           
-                            var materialExists = materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == blendMaterialcsvId)
-                                                            .ChildCriteriaSetCodeValues.FirstOrDefault(ccv => ccv.ChildCriteriaSetCodeValue.SetCodeValueId == setCodeValueId);
-                            if (materialExists == null)
-                            {
-                                var criteriaSetCodeValueLink = new CriteriaSetCodeValueLink
-                                {
-                                    ChildCriteriaSetCodeValue = new CriteriaSetCodeValue
-                                    {
-                                        SetCodeValueId = setCodeValueId,
-                                        CodeValue = percentage.ToString()
-                                    }
-                                };
-
-                                materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == blendMaterialcsvId)
-                                                            .ChildCriteriaSetCodeValues.Add(criteriaSetCodeValueLink);
-                            }                          
-                            break;
-                        case MATERIAL_FORMAT.COMBO_BLEND:    
-                        case MATERIAL_FORMAT.COMBO_2_BLEND:
-                            var blendedCVs = materialCSV.CriteriaSetCodeValues.Where(cv => cv.SetCodeValueId == blendMaterialcsvId);
-                            var blendedCV = blendedCVs.FirstOrDefault();
-                            if (materialFormat == MATERIAL_FORMAT.COMBO_2_BLEND)
-                            {
-                                if (!isfirstBlendMaterial)
-                                    blendedCV =  blendedCVs.Count() == 2 ? blendedCVs.FirstOrDefault(cv => cv.DisplaySequence == 2) : null;                               
-                            }
-                            if (blendedCV != null)
-                            {
-                                var _materialExists = blendedCV.ChildCriteriaSetCodeValues.FirstOrDefault(ccv => ccv.ChildCriteriaSetCodeValue.SetCodeValueId == setCodeValueId);
-                                if (_materialExists == null)
-                                {
-                                    var criteriaSetCodeValueLink = new CriteriaSetCodeValueLink
-                                    {
-                                        ChildCriteriaSetCodeValue = new CriteriaSetCodeValue
-                                        {
-                                            SetCodeValueId = setCodeValueId,
-                                            CodeValue = percentage.ToString()
-                                        }
-                                    };                                 
-                                    blendedCV.ChildCriteriaSetCodeValues.Add(criteriaSetCodeValueLink);
-                                }
-                            }
-                            else
-                            {
-                                var newCriteriaSetCodeValueLink = new CriteriaSetCodeValueLink
-                                {
-                                    ChildCriteriaSetCodeValue = new CriteriaSetCodeValue
-                                    {
-                                        SetCodeValueId = setCodeValueId,
-                                        CodeValue = percentage.ToString()
-                                    }
-                                };
-
-                                var newCscv = new CriteriaSetCodeValue
-                                {
-                                    CriteriaSetValueId = materialCSV.ID,
-                                    SetCodeValueId = blendMaterialcsvId,                                    
-                                    ID = Utils.IdGenerator.getNextid(),
-                                    DisplaySequence = 2
-                                };
-                                newCscv.ChildCriteriaSetCodeValues.Add(newCriteriaSetCodeValueLink);
-                                materialCSV.CriteriaSetCodeValues.Add(newCscv);                               
-                            }
-                            break;
-                    }
-                }
-            }
-            else
-            {
-                //log batch error
-                addValidationError(criteriaCode, material);
-                _hasErrors = true;
-            }
-        }
-
+                
         private static void processThemes(string text)
         {
             //TODO: ensure we this the lookup as generic direct from Lookups object instead of converting here. 
@@ -2294,8 +2110,185 @@ namespace ImportPOC2
                     }
                 }
             }
-        }       
+        }
 
+        private static MATERIAL_FORMAT GetMaterialFormat(string text)
+        {
+            MATERIAL_FORMAT format = MATERIAL_FORMAT.SINGLE;
+            var isCombo = text.ToLower().Contains("combo");
+            var isBlend = text.ToLower().Contains("blend");
+
+            if (isCombo && !isBlend)
+            {
+                format = MATERIAL_FORMAT.COMBO;
+            }
+            else if (!isCombo && isBlend)
+            {
+                format = MATERIAL_FORMAT.BLEND;
+            }
+            else if (isCombo && isBlend)
+            {
+                format = MATERIAL_FORMAT.COMBO_BLEND;
+            }
+
+            return format;
+        }
+
+        private static MajorCodeValueGroup GetLookupMaterial(string materialName, string materialAlias, IEnumerable<MajorCodeValueGroup> lookup)
+        {
+            var validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialAlias, StringComparison.InvariantCultureIgnoreCase));
+
+            if (validMaterial == null)
+            {
+                if (materialName != materialAlias)
+                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, materialName, StringComparison.InvariantCultureIgnoreCase));
+
+                if (validMaterial == null) // Material is not found set group to Other
+                    validMaterial = lookup.FirstOrDefault(m => string.Equals(m.Description, "Other", StringComparison.InvariantCultureIgnoreCase));
+            }
+
+            return validMaterial;
+        }
+
+        private static long GetMaterialSetCodeValueId(string name, string alias, IEnumerable<MajorCodeValueGroup> lookup)
+        {
+            var blendMaterial = GetLookupMaterial(name, alias, lookup);
+            return blendMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
+        }
+
+        private static void genericProcessMaterial(string material, string percentage, string materialAlias, string criteriaCode, MATERIAL_FORMAT materialFormat, bool isfirstBlendMaterial, IEnumerable<MajorCodeValueGroup> lookup)
+        {
+            var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+            var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+            var validMaterial = GetLookupMaterial(material, materialAlias, lookup);
+
+            if (validMaterial != null)
+            {
+                var materialCSV = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), materialAlias, StringComparison.CurrentCultureIgnoreCase));
+                var setCodeValueId = validMaterial.CodeValueGroups.FirstOrDefault().SetCodeValues.FirstOrDefault().ID;
+                //add new value if it doesn't exists
+                if (materialCSV == null)
+                {
+                    if (materialFormat == MATERIAL_FORMAT.BLEND || materialFormat == MATERIAL_FORMAT.COMBO_2_BLEND)
+                    {
+                        var blendMaterialcsvId = GetMaterialSetCodeValueId("Blend", string.Empty, lookup);
+                        var criteriaSetCodeValueLink = new CriteriaSetCodeValueLink
+                        {
+                            ChildCriteriaSetCodeValue = new CriteriaSetCodeValue
+                            {
+                                SetCodeValueId = setCodeValueId,
+                                CodeValue = percentage.ToString()
+                            }
+                        };
+                        _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, blendMaterialcsvId, "LIST", "", "", "", criteriaSetCodeValueLink);
+
+                    }
+                    else
+                    {
+                        _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, setCodeValueId, "LIST");
+                    }
+                }
+                else
+                {
+                    var blendMaterialcsvId = GetMaterialSetCodeValueId("Blend", string.Empty, lookup);
+                    switch (materialFormat)
+                    {
+                        case MATERIAL_FORMAT.SINGLE:
+                            materialCSV.CriteriaSetCodeValues.FirstOrDefault().SetCodeValueId = setCodeValueId;
+                            break;
+                        case MATERIAL_FORMAT.COMBO:
+                            var cscv = materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == setCodeValueId);
+                            if (cscv == null)
+                            {
+                                var newCscv = new CriteriaSetCodeValue
+                                {
+                                    CriteriaSetValueId = materialCSV.ID,
+                                    SetCodeValueId = setCodeValueId,
+                                    ID = Utils.IdGenerator.getNextid(),
+                                    DisplaySequence = 2
+                                };
+
+                                materialCSV.CriteriaSetCodeValues.Add(newCscv);
+                            }
+                            break;
+                        case MATERIAL_FORMAT.BLEND:
+                            var blendcv = materialCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == blendMaterialcsvId);
+                            if (blendcv != null)
+                            {
+                                var materialExists = blendcv.ChildCriteriaSetCodeValues.FirstOrDefault(ccv => ccv.ChildCriteriaSetCodeValue.SetCodeValueId == setCodeValueId);
+                                if (materialExists == null)
+                                {
+                                    var criteriaSetCodeValueLink = new CriteriaSetCodeValueLink
+                                    {
+                                        ChildCriteriaSetCodeValue = new CriteriaSetCodeValue
+                                        {
+                                            SetCodeValueId = setCodeValueId,
+                                            CodeValue = percentage.ToString()
+                                        }
+                                    };
+
+                                    blendcv.ChildCriteriaSetCodeValues.Add(criteriaSetCodeValueLink);
+                                }
+                            }
+                            break;
+                        case MATERIAL_FORMAT.COMBO_BLEND:
+                        case MATERIAL_FORMAT.COMBO_2_BLEND:
+                            var blendedCVs = materialCSV.CriteriaSetCodeValues.Where(cv => cv.SetCodeValueId == blendMaterialcsvId);
+                            var blendedCV = blendedCVs.FirstOrDefault();
+                            if (materialFormat == MATERIAL_FORMAT.COMBO_2_BLEND)
+                            {
+                                if (!isfirstBlendMaterial)
+                                    blendedCV = blendedCVs.Count() == 2 ? blendedCVs.FirstOrDefault(cv => cv.DisplaySequence == 2) : null;
+                            }
+                            if (blendedCV != null)
+                            {
+                                var _materialExists = blendedCV.ChildCriteriaSetCodeValues.FirstOrDefault(ccv => ccv.ChildCriteriaSetCodeValue.SetCodeValueId == setCodeValueId);
+                                if (_materialExists == null)
+                                {
+                                    var criteriaSetCodeValueLink = new CriteriaSetCodeValueLink
+                                    {
+                                        ChildCriteriaSetCodeValue = new CriteriaSetCodeValue
+                                        {
+                                            SetCodeValueId = setCodeValueId,
+                                            CodeValue = percentage.ToString()
+                                        }
+                                    };
+                                    blendedCV.ChildCriteriaSetCodeValues.Add(criteriaSetCodeValueLink);
+                                }
+                            }
+                            else
+                            {
+                                var newCriteriaSetCodeValueLink = new CriteriaSetCodeValueLink
+                                {
+                                    ChildCriteriaSetCodeValue = new CriteriaSetCodeValue
+                                    {
+                                        SetCodeValueId = setCodeValueId,
+                                        CodeValue = percentage.ToString()
+                                    }
+                                };
+
+                                var newCscv = new CriteriaSetCodeValue
+                                {
+                                    CriteriaSetValueId = materialCSV.ID,
+                                    SetCodeValueId = blendMaterialcsvId,
+                                    ID = Utils.IdGenerator.getNextid(),
+                                    DisplaySequence = 2
+                                };
+                                newCscv.ChildCriteriaSetCodeValues.Add(newCriteriaSetCodeValueLink);
+                                materialCSV.CriteriaSetCodeValues.Add(newCscv);
+                            }
+                            break;
+                    }
+                }
+            }
+            else
+            {
+                //log batch error
+                addValidationError(criteriaCode, material);
+                _hasErrors = true;
+            }
+        }
+        
         private static void processMaterials(string text)
         {
             //comma separated list of values
@@ -2475,64 +2468,186 @@ namespace ImportPOC2
             }            
         }
 
+        private static COLOR_FORMAT GetColorFormat(string text)
+        {
+            COLOR_FORMAT format = COLOR_FORMAT.SINGLE;
+            var isCombo = text.ToLower().Contains("combo");
+            var tokens = text.Split(':');
+
+            if (isCombo && tokens.Length == 4)
+            {
+                format = COLOR_FORMAT.COMBO_1PRIMARY_1SECONDARY;
+            }
+            else if (isCombo && tokens.Length == 6)
+            {
+                format = COLOR_FORMAT.COMBO_1PRIMARY_2SECONDARY;
+            }           
+
+            return format;
+        }
+
+        private static ColorGroup GetLookupColor(string colorName, string colorAlias, IEnumerable<ColorGroup> lookup)
+        {
+            var validColor = lookup.FirstOrDefault(m => string.Equals(m.Description, colorAlias, StringComparison.InvariantCultureIgnoreCase));
+
+            if (validColor == null)
+            {
+                if (colorName != colorAlias)
+                    validColor = lookup.FirstOrDefault(m => string.Equals(m.Description, colorName, StringComparison.InvariantCultureIgnoreCase));
+
+                if (validColor == null) // Color is not found set group to Other
+                    validColor = lookup.FirstOrDefault(m => string.Equals(m.Description, "Unclassified/Other", StringComparison.InvariantCultureIgnoreCase));
+            }
+
+            return validColor;
+        }
+
+        private static long GetColorSetCodeValueId(string name, string alias, IEnumerable<ColorGroup> lookup)
+        {
+            var color = GetLookupColor(name, alias, lookup);
+            return color.SetCodeValues.First().Id;
+        }
+
+        private static void processComboColor(string colors, string colorAlias, string criteriaCode, COLOR_FORMAT color_format, IEnumerable<ColorGroup> colorLookup)
+        {
+            // Format:  SubGroup Name:Combo:SubGroup Name:Type=Alias
+            // Format:  SubGroup Name:Combo:SubGroup Name:Type:SubGroup Name:Type=Alias
+
+            var colorSeparators = new string[] { ":Combo:", ":combo:" };
+            var comboColor = colors.Split(colorSeparators, StringSplitOptions.RemoveEmptyEntries);
+            if (comboColor.Length == 2)
+            {
+                
+                var firstColor = comboColor[0];              
+                var firstColorcvid = GetColorSetCodeValueId(firstColor, colorAlias, colorLookup);
+
+                var secondColor = string.Empty;
+                var secondColorType = string.Empty;
+                var secondColorcvid = 0L;
+
+                var thirdColor = string.Empty;
+                var thirdColorType = string.Empty;
+                var thirdColorcvid = 0L;
+
+                var combo2ndPart = comboColor[1].Split(':');
+                if (combo2ndPart.Length >= 2)
+                {
+                    secondColor = combo2ndPart[0];
+                    secondColorType = combo2ndPart[1];
+                    secondColorcvid = GetColorSetCodeValueId(firstColor, colorAlias, colorLookup);
+                }
+
+                if (color_format == COLOR_FORMAT.COMBO_1PRIMARY_2SECONDARY)
+                {
+                    thirdColor = combo2ndPart[2];
+                    thirdColorType = combo2ndPart[3];
+                    thirdColorcvid = GetColorSetCodeValueId(thirdColor, colorAlias, colorLookup);
+                }
+
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+                var colorCSV = criteriaSet.CriteriaSetValues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), colorAlias, StringComparison.CurrentCultureIgnoreCase));
+                if (colorCSV != null)
+                {
+                    _criteriaProcessor.deleteCodeValues(colorCSV, new List<long> { firstColorcvid, secondColorcvid, thirdColorcvid }, criteriaSet);
+                }
+
+                genericProcessColor(firstColor, "main", colorAlias, criteriaCode, color_format, true, colorLookup);
+                genericProcessColor(secondColor, secondColorType, colorAlias, criteriaCode, color_format, false, colorLookup);
+
+                if (color_format == COLOR_FORMAT.COMBO_1PRIMARY_2SECONDARY)
+                {
+                    genericProcessColor(thirdColor, thirdColorType, colorAlias, criteriaCode, color_format, false, colorLookup);
+                }
+            }
+            else
+            {
+                addValidationError(criteriaCode, string.Join(colors, "=", colorAlias));
+                _hasErrors = true;
+            }   
+        }     
+
+        private static void genericProcessColor(string color, string colorType, string colorAlias, string criteriaCode, COLOR_FORMAT colorFormat, bool isfirstColor, IEnumerable<ColorGroup> lookup)
+        {
+            var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+            var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+            var validColor = GetLookupColor(color, colorAlias, lookup);
+
+            if (validColor != null)
+            {
+                var colorCSV = existingCsvalues.FirstOrDefault(csv => string.Equals(csv.Value.ToString(), colorAlias, StringComparison.CurrentCultureIgnoreCase));
+                var setCodeValueId = validColor.SetCodeValues.First().Id;
+                //add new value if it doesn't exists
+                if (colorCSV == null)
+                {
+                    _criteriaProcessor.CreateNewValue(criteriaCode, colorAlias, setCodeValueId, "LIST", "", "", colorType);                   
+                }
+                else
+                {                   
+                    switch (colorFormat)
+                    {
+                        case COLOR_FORMAT.SINGLE:
+                            colorCSV.CriteriaSetCodeValues.FirstOrDefault().SetCodeValueId = setCodeValueId;
+                            break;
+                        case COLOR_FORMAT.COMBO_1PRIMARY_1SECONDARY:
+                        case COLOR_FORMAT.COMBO_1PRIMARY_2SECONDARY:
+                            var cscv = colorCSV.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == setCodeValueId);
+                            if (cscv == null)
+                            {
+                                var newCscv = new CriteriaSetCodeValue
+                                {
+                                    CriteriaSetValueId = colorCSV.ID,
+                                    SetCodeValueId = setCodeValueId,
+                                    ID = Utils.IdGenerator.getNextid(),
+                                    CodeValueDetail = colorType,                                
+                                };
+
+                                colorCSV.CriteriaSetCodeValues.Add(newCscv);
+                            }                                      
+                            break;               
+                    }
+                }
+            }
+            else
+            {
+                //log batch error
+                addValidationError(criteriaCode, color);
+                _hasErrors = true;
+            }
+        }
+
         private static void processProductColors(string text)
         {
-            //colors are comma delimited 
+            //comma separated list of values
             if (_firstRowForProduct && !string.IsNullOrWhiteSpace(text))
             {
-                var colorList = text.ConvertToList();
-                colorList.ForEach(c =>
+                var criteriaCode = Constants.CriteriaCodes.Color;
+                var colorLookup = Lookups.ColorGroupList.SelectMany(g => g.CodeValueGroups);
+                var valueList = text.ConvertToList();
+                var aliasList = new List<string>();
+                valueList.ForEach(value =>
                 {
-                    //each color is in format of colorName=alias
-                    //TODO: COMBO COLORS
-                    string colorName;
-                    string aliasName;
-                    var colorWithAlias = c.Split('=');
-                    if (colorWithAlias.Length > 1)
+                    var color_format = GetColorFormat(value);
+                    var splittedValue = value.SplitValue('=');
+                    var colors = splittedValue.CodeValue;
+                    var colorAlias = splittedValue.Alias;
+                    aliasList.Add(colorAlias);
+                    switch (color_format)
                     {
-                        colorName = colorWithAlias[0];
-                        aliasName = colorWithAlias[1];
-                    }
-                    else
-                    {
-                        colorName = c;
-                        aliasName = c;
-                    }
-                    // if colorname isn't recognized, then it gets "UNCLASSIFIED/other" grouping
-                    var productColors = _criteriaProcessor.GetCSValuesByCriteriaCode("PRCL");
-                    var colorObj = Lookups.ColorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => string.Equals(g.Description, colorName, StringComparison.CurrentCultureIgnoreCase));
-                    var existing = productColors.FirstOrDefault(p => p.Value == aliasName);
-
-                    long setCodeId = 0;
-                    if (colorObj == null)
-                    {
-                        //they picked a color that doesn't exist, so we choose the "other" set code to assign it on the new value
-                        colorObj = Lookups.ColorGroupList.SelectMany(g => g.CodeValueGroups).FirstOrDefault(g => string.Equals(g.Description, "Unclassified/Other", StringComparison.CurrentCultureIgnoreCase));
-                        if (colorObj != null)
-                        {
-                            setCodeId = colorObj.SetCodeValues.First().Id;
-                        }
-                    }
-                    else
-                    {
-                        setCodeId = colorObj.SetCodeValues.First().Id;
-                    }
-
-                    if (existing == null)
-                    {
-                        //needs to be added
-                        _criteriaProcessor.CreateNewValue("PRCL", aliasName, setCodeId);
-                    }
-                    else
-                    {
-                        //update existing if its different colorname?
-                        //updateValue(existing, setCodeId);
+                        case COLOR_FORMAT.SINGLE:
+                            genericProcessColor(colors, "main", colorAlias, criteriaCode, color_format, true, colorLookup);
+                            break;
+                        case COLOR_FORMAT.COMBO_1PRIMARY_1SECONDARY:
+                        case COLOR_FORMAT.COMBO_1PRIMARY_2SECONDARY:
+                            processComboColor(colors, colorAlias, criteriaCode, color_format, colorLookup);
+                            break;
                     }
                 });
 
-                //remove colors from product here. 
-            }
-        }                
+                var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode(criteriaCode);
+                var existingCsvalues = criteriaSet.CriteriaSetValues.ToList();
+                _criteriaProcessor.DeleteCsValues(existingCsvalues, aliasList, criteriaSet);
+            }           
+        }
         
         private static MediaCitation FindMediaCitation(string[] catalogInfo)
         {

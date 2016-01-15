@@ -123,6 +123,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DataFetchers\Lookup.cs" />
+    <Compile Include="Enums.cs" />
     <Compile Include="Lookups.cs" />
     <Compile Include="Models\Category.cs" />
     <Compile Include="Extensions.cs" />

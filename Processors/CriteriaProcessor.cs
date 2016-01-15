@@ -74,7 +74,7 @@ namespace ImportPOC2.Processors
 
         //TODO: can we "detect" what value type code to use instead of passing it in? 
         //TODO: pass in criteria set, it's known from everywhere it is invoked
-        public void CreateNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "", CriteriaSetCodeValueLink childCriteriaSetCodeValue = null)
+        public void CreateNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "", string codeValueDetail="", CriteriaSetCodeValueLink childCriteriaSetCodeValue = null)
         {
             var cSet = GetCriteriaSetByCode(criteriaCode, optionName);
 
@@ -96,6 +96,7 @@ namespace ImportPOC2.Processors
                 CriteriaSetValueId = newCsv.ID,
                 SetCodeValueId = setCodeValueId,               
                 ID = Utils.IdGenerator.getNextid(),
+                CodeValueDetail = codeValueDetail,
                 DisplaySequence = 1,
             };
 
@@ -249,8 +250,15 @@ namespace ImportPOC2.Processors
 
                 cscvToDelete.ForEach(e =>
                 {
-                    var toDelete = criteriaSet.CriteriaSetValues.FirstOrDefault().CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == e.SetCodeValueId);
-                    criteriaSet.CriteriaSetValues.FirstOrDefault().CriteriaSetCodeValues.Remove(toDelete);
+                    var csv = criteriaSet.CriteriaSetValues.FirstOrDefault();
+                    if (csv != null)
+                    {
+                        var toDelete = csv.CriteriaSetCodeValues.FirstOrDefault(cv => cv.SetCodeValueId == e.SetCodeValueId);
+                        if (toDelete != null)
+                        {
+                            criteriaSet.CriteriaSetValues.FirstOrDefault().CriteriaSetCodeValues.Remove(toDelete);
+                        }
+                    }
                 });
             }
         }
@@ -274,8 +282,15 @@ namespace ImportPOC2.Processors
 
                 cscvToDelete.ForEach(e =>
                 {
-                    var toDelete = criteriaSetValue.CriteriaSetCodeValues.FirstOrDefault().ChildCriteriaSetCodeValues.FirstOrDefault(scv => scv == e);
-                    criteriaSetValue.CriteriaSetCodeValues.FirstOrDefault().ChildCriteriaSetCodeValues.Remove(toDelete);
+                    var cv = criteriaSetValue.CriteriaSetCodeValues.FirstOrDefault();
+                    if(cv != null)
+                    {
+                        var toDelete = cv.ChildCriteriaSetCodeValues.FirstOrDefault(scv => scv == e);
+                        if (toDelete != null)
+                        {
+                            criteriaSetValue.CriteriaSetCodeValues.FirstOrDefault().ChildCriteriaSetCodeValues.Remove(toDelete);
+                        }
+                    }
                 });
             }
         }
