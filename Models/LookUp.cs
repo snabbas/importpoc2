@@ -15,7 +15,6 @@ namespace ImportPOC2
         public string Description { get; set; }
     }
 
-
     public class GenericLookUp
     {
         public string CodeValue { get; set; }
@@ -68,12 +67,5 @@ namespace ImportPOC2
 
         public string Code { get; set; }
         public ICollection<CodeValueGroup> CodeValueGroups { get; set; }        
-    }
-  
-    public class GenericIdLookup
-    {
-        public string CriteriaCode { get; set; }
-        public int CriteriaAttributeId { get; set; }
-        public long CustomSetCodeValueId { get; set; }
-    }
+    } 
 }
