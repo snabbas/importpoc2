@@ -565,9 +565,9 @@ namespace ImportPOC2
             set { _sizesLookup = value; }
         }
 
-        private static List<GenericIdLookup> _sizesIdsLookup = null;
+        private static List<GenericLookUp> _sizesIdsLookup = null;
 
-        public static List<GenericIdLookup> SizeIdsLookup
+        public static List<GenericLookUp> SizeIdsLookup
         {
             get
             {
@@ -583,11 +583,11 @@ namespace ImportPOC2
                         }
                     }
 
-                    _sizesIdsLookup = new List<GenericIdLookup>();
+                    _sizesIdsLookup = new List<GenericLookUp>();
 
                     _sizeTypes.ForEach(sizeType =>
                     {
-                        var genericItem = new GenericIdLookup();
+                        var genericItem = new GenericLookUp();
                         genericItem.CriteriaCode = sizeType.Code;
 
                         var otherCodeValueGroup = sizeType.CodeValueGroups.FirstOrDefault(cvg => cvg.Description.Contains("Other"));
@@ -595,13 +595,9 @@ namespace ImportPOC2
                         {
                             var otherSetCodeValue = otherCodeValueGroup.SetCodeValues.FirstOrDefault();
                             if (otherSetCodeValue != null)
-                                genericItem.CustomSetCodeValueId = otherSetCodeValue.ID;
+                                genericItem.ID = otherSetCodeValue.ID;
                         }
-
-                        var criteriaAttribute = CriteriaAttributeLookup(sizeType.Code);
-                        if (criteriaAttribute != null)
-                            genericItem.CriteriaAttributeId = criteriaAttribute.ID;
-
+                        
                         _sizesIdsLookup.Add(genericItem);
                     });
                 }
