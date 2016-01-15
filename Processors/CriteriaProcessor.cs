@@ -74,7 +74,7 @@ namespace ImportPOC2.Processors
 
         //TODO: can we "detect" what value type code to use instead of passing it in? 
         //TODO: pass in criteria set, it's known from everywhere it is invoked
-        public void CreateNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "", CriteriaSetCodeValueLink childCriteriaSetCodeValue = null)
+        public void CreateNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "", CriteriaSetCodeValueLink childCriteriaSetCodeValue = null, bool setFormatValue = true)
         {
             var cSet = GetCriteriaSetByCode(criteriaCode, optionName);
 
@@ -87,7 +87,9 @@ namespace ImportPOC2.Processors
                 ID = Utils.IdGenerator.getNextid(),
                 ValueTypeCode = valueTypeCode,
                 CriteriaValueDetail = valueDetail,
-                FormatValue = value.ToString() //default formatvalue to be same as value
+                //for most cases this would be the same as value field except in cases where value is an object and not a string
+                //for those cases Radar will set this field
+                FormatValue = setFormatValue ? value.ToString() : "" 
             };
 
             //create new criteria set code value
@@ -302,7 +304,7 @@ namespace ImportPOC2.Processors
         public CriteriaSetValue getCsValueByFormatValue(long scvId, IEnumerable<CriteriaSetValue> criteriaSetValues, string formatValue)
         {
             return (from v in criteriaSetValues
-                    let scv = v.CriteriaSetCodeValues.FirstOrDefault(s => s.SetCodeValueId == scvId)
+                    let scv = v.CriteriaSetCodeValues.Where(s => s.SetCodeValueId == scvId)
                     where scv != null
                         && v.FormatValue == formatValue
                     select v)
@@ -350,6 +352,331 @@ namespace ImportPOC2.Processors
                 if (cs != null)
                     productConfiguration.ProductCriteriaSets.Remove(cs);
             }
+        }
+
+        public dynamic createSizeValueObject(string criteriaCode, string value)
+        {   
+            var retVal = new List<dynamic>();
+            CriteriaAttribute criteriaAttribute = null;
+            dynamic newVal = null;
+            var format = string.Empty;
+
+            switch (criteriaCode)
+            {
+                case "SAHU":
+                case "SABR":
+                    criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode);
+                    if (criteriaAttribute != null)
+                    {
+                        newVal = createNewValueObject(criteriaAttribute.ID, value);
+                        retVal.Add(newVal);
+                    }
+                    break;
+
+                case "SAWI":               
+                    var separator = 'x';                    
+                    var splittedValue = value.Split(separator);
+
+                    if (splittedValue.Length > 2)
+                    {
+                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
+                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                        break;
+                    }
+
+                    criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Waist");
+                    if (criteriaAttribute != null)
+                    {
+                        newVal = createNewValueObject(criteriaAttribute.ID, splittedValue[0]);
+                        retVal.Add(newVal);
+                    }
+
+                    if (splittedValue.Length == 2)
+                    {
+                        criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Inseam");
+                        if (criteriaAttribute != null)
+                        {
+                            newVal = createNewValueObject(criteriaAttribute.ID, splittedValue[1]);
+                            retVal.Add(newVal);
+                        }
+                    }                   
+                    break;
+
+                case "SANS":
+                    separator = '(';
+                    splittedValue = value.Split(separator);
+
+                    if (splittedValue.Length > 2)
+                    {
+                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
+                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                        break;
+                    }
+
+                    criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Neck");
+                    if (criteriaAttribute != null)
+                    {
+                        newVal = createNewValueObject(criteriaAttribute.ID, splittedValue[0]);
+                        retVal.Add(newVal);
+                    }
+
+                    if (splittedValue.Length == 2)
+                    {
+                        criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Sleeve");
+                        if (criteriaAttribute != null)
+                        {
+                            newVal = createNewValueObject(criteriaAttribute.ID, splittedValue[1]);
+                            retVal.Add(newVal);
+                        }
+                    }
+                    break;   
+                 
+                case "SAIT":
+                    criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode);
+                    //check whether the value is an integer
+                    //if they provided only an integer value then the unit is defaulted to months
+                    int res = 0;
+                    int.TryParse(value, out res);                    
+                    if (res > 0)
+                    {                            
+                        value = value + " months";   
+                    }
+                                                                
+                    if (value.Contains("months"))
+                    {
+                        splittedValue = value.Split(' ');
+
+                        if (splittedValue.Length == 2 && splittedValue[1] == "months")
+                        {
+                            value = splittedValue[0];
+                            newVal = createValueOnBasisOfUnitOfMeasure("months", criteriaAttribute, value);                                
+                        }
+                        else
+                        {
+                            Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
+                                _currentProduct.ID, _currentProduct.ExternalProductId);
+                        }
+                    }
+                    else if (value.Contains("T"))
+                    {
+                        splittedValue = value.Split('T');
+
+                        if (splittedValue.Length == 2 && splittedValue[1] == string.Empty)
+                        {
+                            value = splittedValue[0];
+                            newVal = createValueOnBasisOfUnitOfMeasure("T", criteriaAttribute, value);
+                        }
+                        else
+                        {
+                            Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
+                                _currentProduct.ID, _currentProduct.ExternalProductId);
+                        }
+                    }
+                    else
+                    {
+                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
+                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                    }                    
+
+                    if (newVal != null)
+                        retVal.Add(newVal);
+
+                    break;
+               
+                case "SVWT":
+                case "CAPS":
+                    separator = ':';
+                    splittedValue = value.Split(separator);
+
+                    if (splittedValue.Length != 2)
+                    {
+                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
+                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                        break;
+                    }
+
+                    if (criteriaCode == "SVWT")
+                    {
+                        //first look it up into unit of measures for volume
+                        criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Volume");
+                        if (criteriaAttribute != null)
+                        {
+                            var foundUom = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == splittedValue[1]);
+                            if (foundUom != null)
+                            {
+                                newVal = createNewValueObject(criteriaAttribute.ID, splittedValue[0], foundUom.Code);
+                            }
+                            //then look it up into unit of measures for weight
+                            else
+                            {
+                                criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, "Weight");
+                                if (criteriaAttribute != null)
+                                {
+                                    foundUom = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == splittedValue[1]);
+                                    if (foundUom != null)
+                                    {
+                                        newVal = createNewValueObject(criteriaAttribute.ID, splittedValue[0], foundUom.Code);
+                                    }
+                                    else
+                                    {
+                                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
+                                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode);
+                        if (criteriaAttribute != null)
+                        {
+                            var foundUom = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == splittedValue[1]);
+                            if (foundUom != null)
+                            {
+                                newVal = createNewValueObject(criteriaAttribute.ID, splittedValue[0], foundUom.Code);
+                            }
+                        }
+                    }
+
+                    if (newVal != null)
+                        retVal.Add(newVal);
+
+                    break;
+
+                case "DIMS":
+                    separator = ';';
+                    splittedValue = value.Split(separator);
+
+                    if (splittedValue.Length > 3)
+                    {
+                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
+                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                        break;
+                    }
+
+                    foreach (var dim in splittedValue)
+                    {
+                        var dimSplit = dim.Split(':');
+                        if (dimSplit.Length != 3)
+                        {
+                            Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
+                                _currentProduct.ID, _currentProduct.ExternalProductId);
+                            break;
+                        }
+
+                        var attribute = dimSplit[0].ToString();
+                        var unitValue = dimSplit[1].ToString();
+                        var uom = dimSplit[2].ToString();
+
+                        //workaround for diamter as "Dia" doesn't matches the description in lookup
+                        if (attribute == "Dia")
+                            attribute = "Diameter";
+
+                        criteriaAttribute = Lookups.CriteriaAttributeLookup(criteriaCode, attribute);
+
+                        if (criteriaAttribute != null)
+                        {
+                            //work around for feet and inch because they don't give us the format in the sheet 
+                            if (uom == "ft")
+                                format = "'";
+                            else if (uom == "in")
+                                format = "\"";
+                            else
+                                format = uom;
+
+                            var foundUom = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == format);
+                            if (foundUom != null)
+                            {
+                                newVal = createNewValueObject(criteriaAttribute.ID, unitValue, foundUom.Code);
+                            }
+                            else
+                            {
+                                Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
+                                    _currentProduct.ID, _currentProduct.ExternalProductId);
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
+                                _currentProduct.ID, _currentProduct.ExternalProductId);
+                            break;
+                        }
+
+                        if (newVal != null)
+                            retVal.Add(newVal);
+                    }                   
+
+                    break;
+            }
+
+            return retVal;
+        }
+
+        private dynamic createNewValueObject(int criteriaAttributeId, string unitValue, string unitOfMeasureCode = "")
+        {
+            var newValue = new
+            {
+                CriteriaAttributeId = criteriaAttributeId,
+                UnitValue = unitValue,
+                UnitOfMeasureCode = unitOfMeasureCode
+            };
+
+            return newValue;
+        }
+
+        private dynamic createValueOnBasisOfUnitOfMeasure(string unitOfMeasureType, CriteriaAttribute criteriaAttribute, string value)
+        {
+            dynamic retVal = null;
+
+            if (criteriaAttribute != null)
+            {
+                var uomCode = criteriaAttribute.UnitsOfMeasure.First(m => m.Format == unitOfMeasureType);
+                if (uomCode != null)
+                {
+                    retVal = createNewValueObject(criteriaAttribute.ID, value, uomCode.Code);                    
+                }
+            }
+
+            return retVal;
+        }
+
+        public string formatSizeDimensionValue(string value)
+        {
+            var retVal = string.Empty;
+            var format = string.Empty;
+
+            var dimSplit = value.Split(';');
+            foreach (var str in dimSplit)
+            {
+                var split = str.Split(':');
+
+                if (split.Length != 3)
+                    break;
+
+                //workaround for diamter as "Dia" doesn't matches the description in lookup
+                if (split[0] == "Dia")
+                    split[0] = "Diameter";
+
+                var criteriaAttribute = Lookups.CriteriaAttributeLookup("DIMS", split[0]);
+                if (criteriaAttribute != null)
+                {
+                    //work around for feet and inch because they don't give us the format in the sheet 
+                    if (split[2] == "ft")
+                        format = "'";
+                    else if (split[2] == "in")
+                        format = "\"";
+                    else
+                        format = split[2];
+                                       
+                    retVal += split[1] + " " + format + " x ";                    
+                }
+            }            
+
+            retVal = retVal.Remove(retVal.LastIndexOf(" x "), 3);
+
+            return retVal; 
         }
     }
 }

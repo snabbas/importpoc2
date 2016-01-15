@@ -297,14 +297,13 @@ namespace ImportPOC2
                 return;
             }
 
+            var sizeCs = _criteriaProcessor.getSizeCriteriaSetByCode(sizeType.Code);
             if (sizeType.Code == Constants.CriteriaCodes.SIZE_CAPS || sizeType.Code == Constants.CriteriaCodes.SIZE_SVWT || sizeType.Code == Constants.CriteriaCodes.SIZE_DIMS)
             {
-
-
+                genericProcessSizesHavingOnlyCustomValues(_curProdRow.Size_Values, sizeType.Code, sizeCs);               
             }
             else
-            {                               
-                var sizeCs = _criteriaProcessor.getSizeCriteriaSetByCode(sizeType.Code);
+            {                                               
                 var sizeSetCodeValues = Lookups.SizesLookup.Where(s => s.CriteriaCode == sizeType.Code).ToList();
                 lookupFieldProcessor(_curProdRow.Size_Values, sizeType.Code, sizeSetCodeValues, sizeCs);
             }            
@@ -833,14 +832,13 @@ namespace ImportPOC2
         {
             if (!string.IsNullOrWhiteSpace(_curXid))
             {
-                _log.DebugFormat("staring product {0}", _curXid);
+                _log.DebugFormat("starting product {0}", _curXid);
                 //using current XID, check if product exists, otherwise create new empty model 
                 _currentProduct = getProductByXid() ?? new Product { CompanyId = _companyId };
                 _firstRowForProduct = true;
                 _hasErrors = false;
                 _criteriaProcessor = new CriteriaProcessor(_currentProduct);
                 _priceProcessor = new PriceProcessor(_criteriaProcessor);
-
             }
         }
 
@@ -992,9 +990,11 @@ namespace ImportPOC2
         /// <param name="criteriaCode"></param>
         /// <param name="sheetValue"></param>
         /// <returns></returns>
-        private static bool handleValueExistenceByCode(string criteriaCode, GenericLookUp sheetValue, IEnumerable<CriteriaSetValue> csValues = null)
+        private static bool handleValueExistenceByCode(string criteriaCode, GenericLookUp sheetValue, IEnumerable<CriteriaSetValue> csValues = null, string formattedValue = "")
         {
             var retVal = true;
+            var value = sheetValue.CodeValue;
+
             switch (criteriaCode)
             {
                 case "SHAP":
@@ -1002,7 +1002,7 @@ namespace ImportPOC2
                 case "TDNM":
                 case "ORGN":
                     //for these sets if the sheet value can't be matched, it's a field-level validation error. 
-                    addInvalidValueError(sheetValue.CodeValue, criteriaCode);
+                    addInvalidValueError(value, criteriaCode);
                     retVal = false;
                     break;
 
@@ -1020,42 +1020,83 @@ namespace ImportPOC2
                     var customPkgScv = Lookups.PackagingLookup.FirstOrDefault(p => string.Equals(p.Value ,"Custom", StringComparison.CurrentCultureIgnoreCase));
                     if (customPkgScv != null)
                     {
-                        _criteriaProcessor.CreateNewValue(criteriaCode, sheetValue.CodeValue, customPkgScv.Key, "CUST");
+                        _criteriaProcessor.CreateNewValue(criteriaCode, value, customPkgScv.Key, "CUST");
                     }
                     break;
                 case "PRCL":
                     break;
                 case "MTRL":
-                    break;
+                    break;              
 
                 case "SABR":
                 case "SANS":
                 case "SAHU":
                 case "SAIT":
-                case "SAWI":
-                case "SSNM":
-                case "SVWT":
-                case "CAPS":
-                case "DIMS":
-                case "SOTH":                    
+                case "SAWI":                                                        
                     //this will be a custom value
                     //if the custom value doesn't exists already then create the new value
                     var sizeIds = Lookups.SizeIdsLookup.FirstOrDefault(s => s.CriteriaCode == criteriaCode);                   
                     if (sizeIds != null)
                     {
-                        var existingCsValue = _criteriaProcessor.getCsValueByFormatValue(sizeIds.CustomSetCodeValueId, csValues, sheetValue.CodeValue);
+                        var existingCsValue = _criteriaProcessor.getCsValueByFormatValue(sizeIds.ID.Value, csValues, value);
                         if (existingCsValue == null)
-                        {                            
-                            var value = new
-                            {
-                                CriteriaAttributeId = sizeIds.CriteriaAttributeId,
-                                UnitValue = sheetValue.CodeValue,
-                                UnitOfMeasureCode = ""                                
-                            }; 
-
-                            _criteriaProcessor.CreateNewValue(criteriaCode, value, sizeIds.CustomSetCodeValueId, "CUST");
-                        }
+                        {
+                            var newValueObject = _criteriaProcessor.createSizeValueObject(criteriaCode, value.Trim());                                                      
+                            if (newValueObject.Count > 0)
+                                _criteriaProcessor.CreateNewValue(criteriaCode, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);                                                            
+                            else
+                                retVal = false;
+                        }                                           
                     }
+                    break;
+
+                case "SSNM":
+                case "SOTH":
+                    //these size types will have a string value
+                    sizeIds = Lookups.SizeIdsLookup.FirstOrDefault(s => s.CriteriaCode == criteriaCode);                   
+                    if (sizeIds != null)
+                    {
+                        var existingCsValue = _criteriaProcessor.getCsValueByFormatValue(sizeIds.ID.Value, csValues, value);
+                        if (existingCsValue == null)
+                        {
+                            _criteriaProcessor.CreateNewValue(criteriaCode, value, sizeIds.ID.Value, "CUST");                            
+                        }                                           
+                    }
+                    break;
+
+                case "SVWT":
+                case "CAPS":
+                    sizeIds = Lookups.SizeIdsLookup.FirstOrDefault(s => s.CriteriaCode == criteriaCode);                   
+                    if (sizeIds != null)
+                    {
+                        var existingCsValue = _criteriaProcessor.getCsValueByFormatValue(sizeIds.ID.Value, csValues, formattedValue);
+                        if (existingCsValue == null)
+                        {
+                            var newValueObject = _criteriaProcessor.createSizeValueObject(criteriaCode, value.Trim());
+                            if (newValueObject.Count > 0)                            
+                                _criteriaProcessor.CreateNewValue(criteriaCode, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);
+                            else
+                                retVal = false;                  
+                        }                                           
+                    }                
+
+                    break;
+
+                case "DIMS":
+                    sizeIds = Lookups.SizeIdsLookup.FirstOrDefault(s => s.CriteriaCode == criteriaCode);                   
+                    if (sizeIds != null)
+                    {
+                        var existingCsValue = _criteriaProcessor.getCsValueByFormatValue(sizeIds.ID.Value, csValues, formattedValue);
+                        if (existingCsValue == null)
+                        {
+                            var newValueObject = _criteriaProcessor.createSizeValueObject(criteriaCode, value.Trim());
+                            if (newValueObject.Count > 0)                            
+                                _criteriaProcessor.CreateNewValue(criteriaCode, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);
+                            else
+                                retVal = false;                  
+                        }                                           
+                    }     
+                    
                     break;
             }
 
@@ -1086,6 +1127,36 @@ namespace ImportPOC2
         private static void addInvalidValueError(string invalidValue, string criteriaCode)
         {
             //add to batch error log that the specified value does not match a value in lookup
+        }
+
+        private static void genericProcessSizesHavingOnlyCustomValues(string text, string criteriaCode, ProductCriteriaSet criteriaSet, string formattedValue = "")
+        {
+            //split the values, if it's csv 
+            var sheetValueList = text.ConvertToList();
+            var existingCsValues = criteriaSet.CriteriaSetValues.ToList();
+            var modelValues = new List<string>();
+            string formattedVal = string.Empty;
+
+            var customValues = new List<GenericLookUp>();
+            customValues.AddRange(sheetValueList.Select(s => new GenericLookUp { CodeValue = s }));
+
+            customValues.ForEach(custVal =>
+            {
+                if (criteriaCode == "SVWT" || criteriaCode == "CAPS")
+                {
+                    formattedVal = custVal.CodeValue.Replace(':', ' ');
+                    modelValues.Add(formattedVal);
+                }
+                else
+                {
+                    formattedVal = _criteriaProcessor.formatSizeDimensionValue(custVal.CodeValue);
+                    modelValues.Add(formattedVal);
+                }
+
+                handleValueExistenceByCode(criteriaCode, custVal, existingCsValues, formattedVal);                
+            });
+           
+            _criteriaProcessor.DeleteCsValues(existingCsValues, modelValues, criteriaSet);
         }
 
         private static void genericProcessImprintCriteria(string text, string criteriaCode)
@@ -1468,7 +1539,7 @@ namespace ImportPOC2
                                     setCodeValueId = setCodeValue.ID;
                             }
 
-                            _criteriaProcessor.CreateNewValue(criteriaCode, value, setCodeValueId, "CUST");
+                            _criteriaProcessor.CreateNewValue(criteriaCode, value, setCodeValueId, "CUST", setFormatValue: false);
                         }
                     }
                     else
@@ -1533,7 +1604,7 @@ namespace ImportPOC2
                                     setCodeValueId = setCodeValue.ID;
                             }
                             var valueList = new List<dynamic> { value };
-                            _criteriaProcessor.CreateNewValue(criteriaCode, valueList, setCodeValueId, "CUST");
+                            _criteriaProcessor.CreateNewValue(criteriaCode, valueList, setCodeValueId, "CUST", setFormatValue: false);
                         }
                         else
                         {
@@ -1915,7 +1986,7 @@ namespace ImportPOC2
                             UnitOfMeasureCode = "BUSI"
                         };
 
-                        _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment);
+                        _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment, setFormatValue: false);
                     }
                     else
                     {
@@ -2047,7 +2118,7 @@ namespace ImportPOC2
                                 UnitOfMeasureCode = "BUSI"
                             };
 
-                            _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment);
+                            _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment, setFormatValue: false);
                         }
                         else
                         {
