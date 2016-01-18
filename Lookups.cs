@@ -605,6 +605,20 @@ namespace ImportPOC2
             }
             set { _sizesIdsLookup = value; }
         }
+
+        public static List<ImprintCriteriaLookUp> CriteriaLookupByCode(string typeCode)
+        {
+             if (_productionTimeCriteriaLookup == null)
+                {
+                    var results = RadarHttpClient.GetAsync("lookup/criteria?code=" + typeCode).Result;
+                    if (results.IsSuccessStatusCode)
+                    {
+                        var content = results.Content.ReadAsStringAsync().Result;
+                        _productionTimeCriteriaLookup = JsonConvert.DeserializeObject<List<ImprintCriteriaLookUp>>(content);
+                    }
+                }
+                return _productionTimeCriteriaLookup;            
+        }
     }
 
     public class StaticLookups
