@@ -97,7 +97,7 @@ namespace ImportPOC2.Processors
                                 //add new value if it doesn't exists
                                 if (optionCS == null)
                                 {
-                                    _criteriaProcessor.CreateNewValue(criteriaCode, optionValue, setCodeValueId, "CUST");                                   
+                                    _criteriaProcessor.CreateNewValue(criteriaSet, optionValue, setCodeValueId, "CUST");                                   
                                 }                                
                             });
 
