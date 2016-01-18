@@ -48,6 +48,7 @@ namespace ImportPOC2
         private static bool _hasErrors = false;
         private static ProductRow _curProdRow;
         private static PriceProcessor _priceProcessor;
+        private static OptionsProcessor _optionProcessor;
         private static CriteriaProcessor _criteriaProcessor;
 
 
@@ -266,6 +267,7 @@ namespace ImportPOC2
         private static void processOptions()
         {
             //TODO: VNI-7
+            _optionProcessor.ProcessOptionRow(_curProdRow, _currentProduct);
         }
 
         private static void processSizes()

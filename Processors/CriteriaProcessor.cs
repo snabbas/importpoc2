@@ -41,12 +41,12 @@ namespace ImportPOC2.Processors
                         cSets.FirstOrDefault();
                 }
 
-                retVal = retVal ?? addCriteriaSet(criteriaCode, optionName);
+                retVal = retVal ?? CreateNewCriteriaSet(criteriaCode, optionName);
             }
             return retVal;
         }
 
-        private ProductCriteriaSet addCriteriaSet(string criteriaCode, string optionName = "")
+        public ProductCriteriaSet CreateNewCriteriaSet(string criteriaCode, string optionName = "")
         {
             var newCs = new ProductCriteriaSet
             {
@@ -341,13 +341,13 @@ namespace ImportPOC2.Processors
                     //create a new size criteria set if none already exists
                     if (cSet == null)
                     {
-                        retVal = addCriteriaSet(criteriaCode);
+                        retVal = CreateNewCriteriaSet(criteriaCode);
                     }
                     else
                     {
                         //if another size criteria set already exists replace it with the new size criteria set
                         removeCriteriaSet(cSet.CriteriaCode);
-                        retVal = addCriteriaSet(criteriaCode);
+                        retVal = CreateNewCriteriaSet(criteriaCode);
                     }
                 }
                 else
