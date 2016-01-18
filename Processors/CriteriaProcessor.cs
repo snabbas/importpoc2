@@ -76,16 +76,13 @@ namespace ImportPOC2.Processors
         }
 
 
-        //TODO: can we "detect" what value type code to use instead of passing it in? 
-        //TODO: pass in criteria set, it's known from everywhere it is invoked
-        public void CreateNewValue(string criteriaCode, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "", string codeValueDetail="", CriteriaSetCodeValueLink childCriteriaSetCodeValue = null, bool setFormatValue = true)
-        {
-            var cSet = GetCriteriaSetByCode(criteriaCode, optionName);
-
+        //TODO: can we "detect" what value type code to use instead of passing it in?         
+        public void CreateNewValue(ProductCriteriaSet cSet, object value, long setCodeValueId, string valueTypeCode = "LOOK", string valueDetail = "", string optionName = "", string codeValueDetail="", CriteriaSetCodeValueLink childCriteriaSetCodeValue = null, bool setFormatValue = true)
+        {            
             //create new criteria set value
             var newCsv = new CriteriaSetValue
             {
-                CriteriaCode = criteriaCode,
+                CriteriaCode = cSet.CriteriaCode,
                 CriteriaSetId = cSet.CriteriaSetId,
                 Value = value,
                 ID = IdGenerator.getNextid(),
@@ -411,8 +408,7 @@ namespace ImportPOC2.Processors
 
                     if (splittedValue.Length > 2)
                     {
-                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
-                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                        BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                       
                         break;
                     }
 
@@ -440,8 +436,7 @@ namespace ImportPOC2.Processors
 
                     if (splittedValue.Length > 2)
                     {
-                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
-                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                        BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
                         break;
                     }
 
@@ -485,8 +480,8 @@ namespace ImportPOC2.Processors
                         }
                         else
                         {
-                            Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
-                                _currentProduct.ID, _currentProduct.ExternalProductId);
+                            BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
+                            break;
                         }
                     }
                     else if (value.Contains("T"))
@@ -500,15 +495,15 @@ namespace ImportPOC2.Processors
                         }
                         else
                         {
-                            Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
-                                _currentProduct.ID, _currentProduct.ExternalProductId);
+                            BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
+                            break;
                         }
                     }
                     else
                     {
-                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
-                            _currentProduct.ID, _currentProduct.ExternalProductId);
-                    }                    
+                        BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
+                        break;
+                    }                  
 
                     if (newVal != null)
                         retVal.Add(newVal);
@@ -522,8 +517,7 @@ namespace ImportPOC2.Processors
 
                     if (splittedValue.Length != 2)
                     {
-                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
-                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                        BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
                         break;
                     }
 
@@ -551,8 +545,8 @@ namespace ImportPOC2.Processors
                                     }
                                     else
                                     {
-                                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
-                                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                                        BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
+                                        break;
                                     }
                                 }
                             }
@@ -582,8 +576,7 @@ namespace ImportPOC2.Processors
 
                     if (splittedValue.Length > 3)
                     {
-                        Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value), 
-                            _currentProduct.ID, _currentProduct.ExternalProductId);
+                        BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
                         break;
                     }
 
@@ -592,8 +585,7 @@ namespace ImportPOC2.Processors
                         var dimSplit = dim.Split(':');
                         if (dimSplit.Length != 3)
                         {
-                            Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
-                                _currentProduct.ID, _currentProduct.ExternalProductId);
+                            BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
                             break;
                         }
 
@@ -609,13 +601,19 @@ namespace ImportPOC2.Processors
 
                         if (criteriaAttribute != null)
                         {
-                            //work around for feet and inch because they don't give us the format in the sheet 
-                            if (uom == "ft")
-                                format = "'";
-                            else if (uom == "in")
-                                format = "\"";
-                            else
-                                format = uom;
+                            //work around for feet and inch because they don't give us the format in the sheet                            
+                            switch (uom)
+                            {
+                                case "ft":
+                                    format = "'";
+                                    break;
+                                case "in":
+                                    format = "\"";
+                                    break;
+                                default:
+                                    format = uom;
+                                    break;
+                            }
 
                             var foundUom = criteriaAttribute.UnitsOfMeasure.FirstOrDefault(u => u.Format == format);
                             if (foundUom != null)
@@ -624,15 +622,13 @@ namespace ImportPOC2.Processors
                             }
                             else
                             {
-                                Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
-                                    _currentProduct.ID, _currentProduct.ExternalProductId);
+                                BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
                                 break;
                             }
                         }
                         else
                         {
-                            Utils.Validation.AddValidationError(new Radar.Core.Models.Batch.Batch(), criteriaCode, string.Format("Invalid size value: {0}", value),
-                                _currentProduct.ID, _currentProduct.ExternalProductId);
+                            BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid size value: {0}", value));                           
                             break;
                         }
 

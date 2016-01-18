@@ -50,6 +50,18 @@ namespace ImportPOC2.Utils
                 });
         }
 
+        public static void AddGenericFieldError(string fieldCode, string additionalInfo)
+        {
+            _curBatch.BatchErrorLogs.Add(
+                new BatchErrorLog
+                {
+                    ExternalProductId = CurrentXid,
+                    AdditionalInfo = additionalInfo,
+                    ErrorMessageCode = "GENR",
+                    FieldCode = fieldCode
+                });
+        }
+
         internal static bool SetCurrentBatch(long batchId)
         {
             var retVal = true;

@@ -274,8 +274,7 @@ namespace ImportPOC2
         {           
             if (string.IsNullOrWhiteSpace(_curProdRow.Size_Group) || string.IsNullOrWhiteSpace(_curProdRow.Size_Values))
             {
-                //TODO: add method for this to batch processor, it's not a lookup message
-                //addValidationError("SIZE", "size group/values must be provided");
+                BatchProcessor.AddGenericFieldError("SIZE", "size group/values must be provided");                
                 return;
             }
 
@@ -300,8 +299,7 @@ namespace ImportPOC2
         }
 
         private static void processColorsMaterials()
-        {
-            //TODO: VNI-5
+        {           
             processProductColors(_curProdRow.Product_Color);
             processMaterials(_curProdRow.Material);
         }
@@ -899,7 +897,7 @@ namespace ImportPOC2
                 {
                     if (!sheetValue.ID.HasValue)
                     {
-                        handleValueExistenceByCode(criteriaCode, sheetValue, existingCsValues);
+                        handleValueExistenceByCode(criteriaSet, sheetValue, existingCsValues);
                     }
 
                     if (sheetValue.ID.HasValue)
@@ -909,7 +907,7 @@ namespace ImportPOC2
                         if (existing == null)
                         {
                             //create it
-                            _criteriaProcessor.CreateNewValue(criteriaCode, sheetValue.CodeValue, sheetValue.ID.Value);
+                            _criteriaProcessor.CreateNewValue(criteriaSet, sheetValue.CodeValue, sheetValue.ID.Value);
                         }
                         else
                         {
@@ -939,7 +937,7 @@ namespace ImportPOC2
 
                     if (tradenameFound == null)
                     {
-                        handleValueExistenceByCode(criteriaCode, new GenericLookUp { CodeValue = sheetValue });
+                        handleValueExistenceByCode(criteriaSet, new GenericLookUp { CodeValue = sheetValue });
                     }
                     else
                     {
@@ -948,7 +946,7 @@ namespace ImportPOC2
                         if (!exists)
                         {
                             if (tradenameFound.ID != null)
-                                _criteriaProcessor.CreateNewValue(criteriaCode, sheetValue, tradenameFound.ID.Value);
+                                _criteriaProcessor.CreateNewValue(criteriaSet, sheetValue, tradenameFound.ID.Value);
                         }
                     }                                                              
                 });
@@ -987,10 +985,11 @@ namespace ImportPOC2
         /// <param name="criteriaCode"></param>
         /// <param name="sheetValue"></param>
         /// <returns></returns>
-        private static bool handleValueExistenceByCode(string criteriaCode, GenericLookUp sheetValue, IEnumerable<CriteriaSetValue> csValues = null, string formattedValue = "")
+        private static bool handleValueExistenceByCode(ProductCriteriaSet criteriaSet, GenericLookUp sheetValue, IEnumerable<CriteriaSetValue> csValues = null, string formattedValue = "")
         {
             var retVal = true;
             var value = sheetValue.CodeValue;
+            var criteriaCode = criteriaSet.CriteriaCode;
 
             switch (criteriaCode)
             {
@@ -1017,7 +1016,7 @@ namespace ImportPOC2
                     var customPkgScv = Lookups.PackagingLookup.FirstOrDefault(p => string.Equals(p.Value ,"Custom", StringComparison.CurrentCultureIgnoreCase));
                     if (customPkgScv != null)
                     {
-                        _criteriaProcessor.CreateNewValue(criteriaCode, value, customPkgScv.Key, "CUST");
+                        _criteriaProcessor.CreateNewValue(criteriaSet, value, customPkgScv.Key, "CUST");
                     }
                     break;
                 case "PRCL":
@@ -1040,7 +1039,7 @@ namespace ImportPOC2
                         {
                             var newValueObject = _criteriaProcessor.createSizeValueObject(criteriaCode, value.Trim());                                                      
                             if (newValueObject.Count > 0)
-                                _criteriaProcessor.CreateNewValue(criteriaCode, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);                                                            
+                                _criteriaProcessor.CreateNewValue(criteriaSet, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);                                                            
                             else
                                 retVal = false;
                         }                                           
@@ -1056,7 +1055,7 @@ namespace ImportPOC2
                         var existingCsValue = _criteriaProcessor.getCsValueByFormatValue(sizeIds.ID.Value, csValues, value);
                         if (existingCsValue == null)
                         {
-                            _criteriaProcessor.CreateNewValue(criteriaCode, value, sizeIds.ID.Value, "CUST");                            
+                            _criteriaProcessor.CreateNewValue(criteriaSet, value, sizeIds.ID.Value, "CUST");                            
                         }                                           
                     }
                     break;
@@ -1071,7 +1070,7 @@ namespace ImportPOC2
                         {
                             var newValueObject = _criteriaProcessor.createSizeValueObject(criteriaCode, value.Trim());
                             if (newValueObject.Count > 0)                            
-                                _criteriaProcessor.CreateNewValue(criteriaCode, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);
+                                _criteriaProcessor.CreateNewValue(criteriaSet, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);
                             else
                                 retVal = false;                  
                         }                                           
@@ -1088,7 +1087,7 @@ namespace ImportPOC2
                         {
                             var newValueObject = _criteriaProcessor.createSizeValueObject(criteriaCode, value.Trim());
                             if (newValueObject.Count > 0)                            
-                                _criteriaProcessor.CreateNewValue(criteriaCode, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);
+                                _criteriaProcessor.CreateNewValue(criteriaSet, newValueObject, sizeIds.ID.Value, "CUST", setFormatValue: false);
                             else
                                 retVal = false;                  
                         }                                           
@@ -1150,7 +1149,7 @@ namespace ImportPOC2
                     modelValues.Add(formattedVal);
                 }
 
-                handleValueExistenceByCode(criteriaCode, custVal, existingCsValues, formattedVal);                
+                handleValueExistenceByCode(criteriaSet, custVal, existingCsValues, formattedVal);                
             });
            
             _criteriaProcessor.DeleteCsValues(existingCsValues, modelValues, criteriaSet);
@@ -1186,7 +1185,7 @@ namespace ImportPOC2
                     if (!exists)
                     {
                         //add new value if it doesn't exist
-                        _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST");
+                        _criteriaProcessor.CreateNewValue(criteriaSet, value, customSetCodeValueId, "CUST");
                     }
                 });
 
@@ -1216,16 +1215,15 @@ namespace ImportPOC2
                         //add new value if it doesn't exists
                         if (existingCsValue ==  null)
                         {
-                            _criteriaProcessor.CreateNewValue(criteriaCode, splittedValue.Alias, existing.ID);
+                            _criteriaProcessor.CreateNewValue(criteriaSet, splittedValue.Alias, existing.ID);
                         }
                         else
                         {
                             updateCsValue(criteriaCode, existingCsValue, "", existing.ID);
-                        }                       
-                        //NOTE alias cannot be "updated" - an alias change triggers a delete then add of new CSV
+                        }                                               
                     }
                     else
-                    {
+                    {                        
                         //log batch error
                         BatchProcessor.AddLookupValidationError(criteriaCode, value);
                         _hasErrors = true;
@@ -1275,7 +1273,7 @@ namespace ImportPOC2
                                 if (setCodeValue != null)
                                 {
                                     long smplScvId = setCodeValue.ID;
-                                    _criteriaProcessor.CreateNewValue("SMPL", sampleType, smplScvId);
+                                    _criteriaProcessor.CreateNewValue(criteriaSet, sampleType, smplScvId);
                                 }
                             }
                         }
@@ -1352,7 +1350,7 @@ namespace ImportPOC2
                                     setCodeValueId = setCodeValue.ID;
                             }
 
-                            _criteriaProcessor.CreateNewValue(criteriaCode, value, setCodeValueId, "CUST", setFormatValue: false);
+                            _criteriaProcessor.CreateNewValue(criteriaSet, value, setCodeValueId, "CUST", setFormatValue: false);
                         }
                     }
                     else
@@ -1417,7 +1415,7 @@ namespace ImportPOC2
                                     setCodeValueId = setCodeValue.ID;
                             }
                             var valueList = new List<dynamic> { value };
-                            _criteriaProcessor.CreateNewValue(criteriaCode, valueList, setCodeValueId, "CUST", setFormatValue: false);
+                            _criteriaProcessor.CreateNewValue(criteriaSet, valueList, setCodeValueId, "CUST", setFormatValue: false);
                         }
                         else
                         {
@@ -1537,7 +1535,7 @@ namespace ImportPOC2
 
                     if (!exists)
                     {
-                        _criteriaProcessor.CreateNewValue(criteriaCode, valueToMatch, customImprintSizeLocationScvId, "CUST");                            
+                        _criteriaProcessor.CreateNewValue(criteriaSet, valueToMatch, customImprintSizeLocationScvId, "CUST");                            
                     }
                 });
 
@@ -1549,17 +1547,30 @@ namespace ImportPOC2
         {
             genericProcessImprintMethods(text, Constants.CriteriaCodes.ImprintMethod, Lookups.ImprintMethodsLookup);                                   
         }
-
-        //TODO: personalization also allows "Y" instead of a text value that matches lookup
-        //TODO: this must be updated to support "Y" or lookup value
+        
         private static void processPersonalization(string text)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return;
+            //personalization also allows "Y" or "N" instead of a text value that matches lookup            
+            if (string.Equals(text, "Y", StringComparison.CurrentCultureIgnoreCase))
+            {
+                var persValue = Lookups.PersonalizationLookup.FirstOrDefault(p => p.CodeValue == "Personalization");
+                if (persValue != null)
+                {
+                    var criteriaSet = _criteriaProcessor.GetCriteriaSetByCode("PERS");
+                    _criteriaProcessor.CreateNewValue(criteriaSet, "Personalization", persValue.ID);
+                }
+            }
+            else if (string.Equals(text, "N", StringComparison.CurrentCultureIgnoreCase))
+            {
+                //remove whe criteria set
+                _criteriaProcessor.removeCriteriaSet("PERS");
+            }
+            else
+            {
+                genericProcessImprintMethods(text, "PERS", Lookups.PersonalizationLookup);                
+            }
 
-            genericProcessImprintMethods(text, "PERS", Lookups.PersonalizationLookup);
             var pers = _criteriaProcessor.GetCriteriaSetByCode("PERS");
-
             if (pers != null && pers.CriteriaSetValues.Any())
             {
                 _currentProduct.IsPersonalizationAvailable = true;
@@ -1605,7 +1616,7 @@ namespace ImportPOC2
                     if (!exists)
                     {
                         //add new value if it doesn't exists                        
-                        _criteriaProcessor.CreateNewValue(criteriaCode, color, imprintColorScvId, "CUST");
+                        _criteriaProcessor.CreateNewValue(criteriaSet, color, imprintColorScvId, "CUST");
                     }
                 });
 
@@ -1650,7 +1661,7 @@ namespace ImportPOC2
                     //create new value for unimprinted if it doesn't exists
                     if (unimprintedCsvalue == null)
                     {
-                        _criteriaProcessor.CreateNewValue(criteriaCode, "Unimprinted", soldUnimprintedScvId);
+                        _criteriaProcessor.CreateNewValue(criteriaSet, "Unimprinted", soldUnimprintedScvId);
                     }
                     _currentProduct.IsAvailableUnimprinted = true;
                 }
@@ -1707,7 +1718,7 @@ namespace ImportPOC2
                         {
                             var value = exists.ID != null && exists.ID.Value != otherArtworkScValueId ? splittedValue.CodeValue : splittedValue.Alias;
                             if (exists.ID != null)
-                                _criteriaProcessor.CreateNewValue(criteriaCode, value, exists.ID.Value, "CUST", splittedValue.Alias);
+                                _criteriaProcessor.CreateNewValue(criteriaSet, value, exists.ID.Value, "CUST", splittedValue.Alias);
                         }
                         else
                         {
@@ -1801,7 +1812,7 @@ namespace ImportPOC2
                             UnitOfMeasureCode = "BUSI"
                         };
 
-                        _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment, setFormatValue: false);
+                        _criteriaProcessor.CreateNewValue(criteriaSet, value, customSetCodeValueId, "CUST", comment, setFormatValue: false);
                     }
                     else
                     {
@@ -1856,7 +1867,7 @@ namespace ImportPOC2
                                 if (setCodeValue != null)
                                 {
                                     long scvId = setCodeValue.ID;
-                                    _criteriaProcessor.CreateNewValue(criteriaCode, valueField, scvId, "CUST", valueField);
+                                    _criteriaProcessor.CreateNewValue(criteriaSet, valueField, scvId, "CUST", valueField);
                                 }
                             }
                         }
@@ -1933,7 +1944,7 @@ namespace ImportPOC2
                                 UnitOfMeasureCode = "BUSI"
                             };
 
-                            _criteriaProcessor.CreateNewValue(criteriaCode, value, customSetCodeValueId, "CUST", comment, setFormatValue: false);
+                            _criteriaProcessor.CreateNewValue(criteriaSet, value, customSetCodeValueId, "CUST", comment, setFormatValue: false);
                         }
                         else
                         {
@@ -1986,7 +1997,7 @@ namespace ImportPOC2
                                 if (setCodeValue != null)
                                 {
                                     long smplScvId = setCodeValue.ID;
-                                    _criteriaProcessor.CreateNewValue(criteriaCode, valueField, smplScvId);
+                                    _criteriaProcessor.CreateNewValue(criteriaSet, valueField, smplScvId);
                                 }
                             }
                         }
@@ -2250,12 +2261,12 @@ namespace ImportPOC2
                                 CodeValue = percentage.ToString()
                             }
                         };
-                        _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, blendMaterialcsvId, "LIST", "", "", "", criteriaSetCodeValueLink);
+                        _criteriaProcessor.CreateNewValue(criteriaSet, materialAlias, blendMaterialcsvId, "LIST", "", "", "", criteriaSetCodeValueLink);
 
                     }
                     else
                     {
-                        _criteriaProcessor.CreateNewValue(criteriaCode, materialAlias, setCodeValueId, "LIST");
+                        _criteriaProcessor.CreateNewValue(criteriaSet, materialAlias, setCodeValueId, "LIST");
                     }
                 }
                 else
@@ -2649,7 +2660,7 @@ namespace ImportPOC2
                 //add new value if it doesn't exists
                 if (colorCSV == null)
                 {
-                    _criteriaProcessor.CreateNewValue(criteriaCode, colorAlias, setCodeValueId, "LIST", "", "", colorType);                   
+                    _criteriaProcessor.CreateNewValue(criteriaSet, colorAlias, setCodeValueId, "LIST", "", "", colorType);                   
                 }
                 else
                 {                   
