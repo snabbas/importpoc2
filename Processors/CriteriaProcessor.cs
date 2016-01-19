@@ -176,16 +176,22 @@ namespace ImportPOC2.Processors
         public List<CriteriaSetValue> GetValuesBySheetSpecification(string criteriaDefinition)
         {
             var retVal = new List<CriteriaSetValue>();
+            var optionName = string.Empty;
 
             if (!string.IsNullOrWhiteSpace(criteriaDefinition))
             {
                 //get criteria code
                 var code = parseCodeFromPriceCriteria(criteriaDefinition);
+
+                var optionsCriteriaCodes = new[] { "SHOP", "PROP", "IMOP" };
+                if (optionsCriteriaCodes.Contains(code))                
+                    optionName = parseOptionNameFromCriteriaDefinition(criteriaDefinition);                
+
                 // get list of values
                 var val = parseValuesFromPriceCriteria(criteriaDefinition);
                 // match 'em up
 
-                var allcsvs = GetCSValuesByCriteriaCode(code);
+                var allcsvs = GetCSValuesByCriteriaCode(code, optionName);
                 var valueDefinitions = val.Split(',').Select(v => v.Trim()).ToList();
                 valueDefinitions.ForEach(d =>
                 {
@@ -225,10 +231,24 @@ namespace ImportPOC2.Processors
             if (!string.IsNullOrWhiteSpace(criteriaDefinition))
             {
                 //note: cannot use Split here as values could have embedded colons
-                var separatorPos = criteriaDefinition.IndexOf(':');
+                var separatorPos = criteriaDefinition.LastIndexOf(':');
                 var tmp = criteriaDefinition.Substring(separatorPos + 1);
 
                 retVal = tmp.Trim();
+            }
+
+            return retVal;
+        }
+
+        private string parseOptionNameFromCriteriaDefinition(string criteriaDefinition)
+        {
+            var retVal = string.Empty;
+            if (!string.IsNullOrWhiteSpace(criteriaDefinition))
+            {                
+                var splittedValue = criteriaDefinition.Split(':');
+
+                if (splittedValue.Length == 3)                
+                    retVal = splittedValue[1].Trim();                                                
             }
 
             return retVal;
