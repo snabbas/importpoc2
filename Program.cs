@@ -50,6 +50,7 @@ namespace ImportPOC2
         private static PriceProcessor _priceProcessor;
         private static OptionsProcessor _optionProcessor;
         private static CriteriaProcessor _criteriaProcessor;
+        private static ProductNumbersProcessor _productNumbersProcessor;
 
 
         static void Main(string[] args)
@@ -254,8 +255,8 @@ namespace ImportPOC2
         }
 
         private static void processProductNumbers()
-        {
-            //TODO: VNI-9
+        {                        
+            _productNumbersProcessor.ProcessProductNumberRow(_curProdRow);            
         }
 
         private static void processPricing()
@@ -833,6 +834,7 @@ namespace ImportPOC2
                 _hasErrors = false;
                 _criteriaProcessor = new CriteriaProcessor(_currentProduct);
                 _priceProcessor = new PriceProcessor(_criteriaProcessor);
+                _productNumbersProcessor = new ProductNumbersProcessor(_criteriaProcessor, _priceProcessor, _currentProduct);
                 BatchProcessor.CurrentXid = _curXid;
             }
         }
@@ -2771,6 +2773,7 @@ namespace ImportPOC2
             if (_currentProduct != null )
             {
                 _priceProcessor.FinalizeProductPricing(_currentProduct);
+                _productNumbersProcessor.FinalizeProductNumbers();
                 //TODO: other repeatable sets will "finalize" here as well. 
 
                 if (!_hasErrors)
