@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using Newtonsoft.Json;
@@ -291,7 +292,8 @@ namespace ImportPOC2
                 }
                 else
                 {
-                    criteriaAttribute = _criteriaAttributeLookup.FirstOrDefault(u => u.CriteriaCode == code && u.Description == name);
+                    criteriaAttribute = _criteriaAttributeLookup.FirstOrDefault(u => u.CriteriaCode == code &&
+                        string.Equals(u.Description, name, StringComparison.CurrentCultureIgnoreCase));                       
                 }
             }
 

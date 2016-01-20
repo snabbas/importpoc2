@@ -22,7 +22,11 @@ namespace ImportPOC2.Processors
             _criteriaProcessor = critriaProcessor;
             _priceProcessor = priceProcessor;
             _currentProduct = currentProduct;
-            existingProductNumbers = _currentProduct.ProductNumbers.ToList();
+            existingProductNumbers = new List<ProductNumber>();
+
+            if (_currentProduct.ProductNumbers != null)
+                existingProductNumbers = _currentProduct.ProductNumbers.ToList();
+
             productNumbersMap = new List<ProductNumbersMap>();
         }
 
