@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text;
 using ImportPOC2.Utils;
 using Radar.Models.Product;
 using Constants = Radar.Core.Common.Constants;
@@ -177,6 +178,7 @@ namespace ImportPOC2.Processors
         {
             var retVal = new List<CriteriaSetValue>();
             var optionName = string.Empty;
+            var extractedValues = string.Empty;
 
             if (!string.IsNullOrWhiteSpace(criteriaDefinition))
             {
@@ -185,14 +187,22 @@ namespace ImportPOC2.Processors
 
                 var optionsCriteriaCodes = new[] { "SHOP", "PROP", "IMOP" };
                 if (optionsCriteriaCodes.Contains(code))                
-                    optionName = parseOptionNameFromCriteriaDefinition(criteriaDefinition);                
+                    optionName = parseOptionNameFromCriteriaDefinition(criteriaDefinition);
 
-                // get list of values
-                var val = parseValuesFromPriceCriteria(criteriaDefinition);
+                var criteriaCodesRequiringSpecialHandling = new[] { "PRTM", "RUSH", "SDRU", "SVWT", "CAPS", "DIMS" };
+                if (criteriaCodesRequiringSpecialHandling.Contains(code))
+                {
+                    extractedValues = transformValuesToFormatValueFromCriteriaDefinition(code, criteriaDefinition.Substring(criteriaDefinition.IndexOf(':') + 1));
+                }
+                else
+                {
+                    // get list of values
+                    extractedValues = parseValuesFromPriceCriteria(criteriaDefinition);
+                }
                 // match 'em up
 
                 var allcsvs = GetCSValuesByCriteriaCode(code, optionName);
-                var valueDefinitions = val.Split(',').Select(v => v.Trim()).ToList();
+                var valueDefinitions = extractedValues.Split(',').Select(v => v.Trim()).ToList();
                 valueDefinitions.ForEach(d =>
                 {
                     var tmp = allcsvs.FirstOrDefault(v => string.Equals(v.FormatValue.Trim(), d, StringComparison.CurrentCultureIgnoreCase));
@@ -252,6 +262,67 @@ namespace ImportPOC2.Processors
             }
 
             return retVal;
+        }
+
+        private string transformValuesToFormatValueFromCriteriaDefinition(string criteriaCode, string criteriaValueDefinition)
+        {
+            var retVal = new StringBuilder();            
+            var separator = ',';
+
+            var criteriaValues = criteriaValueDefinition.Split(separator).Select(v => v.Trim()).ToList();
+            if (criteriaValues == null || criteriaValues.Count() == 0)
+                return "";
+
+            switch (criteriaCode)
+            {
+                case "PRTM":
+                case "RUSH":                  
+                    //if it is of RUSH type and is only one value
+                    //transform it to "Rush Service" value
+                    if (criteriaCode == "RUSH" && criteriaValues.Count() == 1)
+                    {
+                        var value = criteriaValues.FirstOrDefault();
+                        if (value != null && string.Equals(value, "Y", StringComparison.InvariantCultureIgnoreCase))
+                            retVal.Append("Rush Service");
+                    }
+                    else
+                    {
+                        criteriaValues.ForEach(v =>
+                        {
+                            retVal.AppendFormat("{0} business days{1}", v, separator);
+                        });
+                    }
+                    break;
+
+                case "SDRU":
+                    //this will always be one value "Y"
+                    var val = criteriaValues.FirstOrDefault();
+                    if (val != null && string.Equals(val, "Y", StringComparison.InvariantCultureIgnoreCase))
+                    {                        
+                        retVal.Append("Same Day Service");
+                    }
+                    break;
+
+                case "SVWT":
+                case "CAPS":
+                    criteriaValues.ForEach(v =>
+                    {
+                        var splittedValue = v.Split(':');
+                        if (splittedValue.Length == 2)                        
+                            retVal.AppendFormat("{0} {1}{2}", splittedValue[0], splittedValue[1], separator);                                                
+                    });
+                    break;
+
+                case "DIMS":
+                    criteriaValues.ForEach(v =>
+                    {
+                        retVal.AppendFormat("{0}{1}", formatSizeDimensionValue(v), separator);                                                                      
+                    });
+
+                    break;
+            }            
+
+            return retVal.ToString();
         }
 
         public void deleteCodeValues(CriteriaSetValue entity, IEnumerable<long> models, ProductCriteriaSet criteriaSet)
@@ -688,13 +759,13 @@ namespace ImportPOC2.Processors
             }
 
             return retVal;
-        }
+        }      
 
         public string formatSizeDimensionValue(string value)
         {
             var retVal = string.Empty;
-
             var dimSplit = value.Split(';');
+
             foreach (var str in dimSplit)
             {
                 var split = str.Split(':');
@@ -702,8 +773,8 @@ namespace ImportPOC2.Processors
                 if (split.Length != 3)
                     break;
 
-                //workaround for diamter as "Dia" doesn't matches the description in lookup
-                if (split[0] == "Dia")
+                //workaround for diamter as "Dia" doesn't matches the description in the lookup
+                if (split[0].ToLower() == "dia")
                     split[0] = "Diameter";
 
                 var criteriaAttribute = Lookups.CriteriaAttributeLookup("DIMS", split[0]);
