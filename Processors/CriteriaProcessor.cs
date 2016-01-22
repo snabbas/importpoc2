@@ -27,6 +27,21 @@ namespace ImportPOC2.Processors
             _currentProduct = currentProduct;
         }
 
+        public IEnumerable<ProductCriteriaSet> GetAllCriteriaSetByCode(string criteriaCode)
+        {
+            IEnumerable<ProductCriteriaSet> retVal = null;
+            if (!string.IsNullOrWhiteSpace(criteriaCode))
+            {
+                var prodConfig = getDefaultProdConfig();
+
+                if (prodConfig != null)
+                {
+                    retVal = prodConfig.ProductCriteriaSets.Where(c => c.CriteriaCode == criteriaCode).ToList();                   
+                }                
+            }
+            return retVal;
+        }
+
         public ProductCriteriaSet GetCriteriaSetByCode(string criteriaCode, string optionName = "")
         {
             ProductCriteriaSet retVal = null;
@@ -469,6 +484,17 @@ namespace ImportPOC2.Processors
             if (productConfiguration != null)
             {
                 var cs = productConfiguration.ProductCriteriaSets.FirstOrDefault(c => c.CriteriaCode == criteriaCode);
+                if (cs != null)
+                    productConfiguration.ProductCriteriaSets.Remove(cs);
+            }
+        }
+
+        public void removeCriteriaSet(long criteriaSetId)
+        {
+            var productConfiguration = getDefaultProdConfig();
+            if (productConfiguration != null)
+            {
+                var cs = productConfiguration.ProductCriteriaSets.FirstOrDefault(c => c.CriteriaSetId == criteriaSetId);
                 if (cs != null)
                     productConfiguration.ProductCriteriaSets.Remove(cs);
             }

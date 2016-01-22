@@ -13,11 +13,13 @@ namespace ImportPOC2.Processors
 {
     public class OptionsProcessor
     {
-        private CriteriaProcessor _criteriaProcessor;
+        private CriteriaProcessor _criteriaProcessor;              
+        private List<ProductCriteriaSet> productOptionsMap;
 
         public OptionsProcessor(CriteriaProcessor criteriaProcessor)
         {
-            _criteriaProcessor = criteriaProcessor;           
+            _criteriaProcessor = criteriaProcessor;
+            productOptionsMap = new List<ProductCriteriaSet>();
         }
 
         private long GetSetCodeValueIdByCriteriaOption(string criteriaCode)
@@ -27,13 +29,13 @@ namespace ImportPOC2.Processors
             IEnumerable<ImprintCriteriaLookUp> OptionLookups = null;
             switch (criteriaCode)
             {
-                case "SHOP":
+                case Constants.CriteriaCodes.ShippingOption:
                     csCode = "SHIP";
                     break;
-                case "PROP":
+                case Constants.CriteriaCodes.ProductOption:
                       csCode = "PROD";                   
                     break;
-                case "IMOP":
+                case Constants.CriteriaCodes.ImprintOption:
                     csCode = "IMPR";
                     break;
             }
@@ -58,9 +60,9 @@ namespace ImportPOC2.Processors
             {
                 var OptionTypeLookUp = new List<CodeValueLookUp>()
                 {
-                    new CodeValueLookUp { Code = "SHOP", Value = "Shipping Option"},
-                    new CodeValueLookUp { Code = "PROP", Value = "Product Option"},
-                    new CodeValueLookUp { Code = "IMOP", Value = "Imprint Option"}
+                    new CodeValueLookUp { Code = Constants.CriteriaCodes.ShippingOption, Value = "Shipping Option"},
+                    new CodeValueLookUp { Code = Constants.CriteriaCodes.ProductOption, Value = "Product Option"},
+                    new CodeValueLookUp { Code = Constants.CriteriaCodes.ImprintOption, Value = "Imprint Option"}
                 };
 
                 var criteriaCode = string.Empty;
@@ -102,6 +104,7 @@ namespace ImportPOC2.Processors
                             });
 
                             _criteriaProcessor.DeleteCsValues(existingCsvalues, valueList, criteriaSet);
+                            productOptionsMap.Add(criteriaSet);
                         }
                         else
                         {
@@ -121,6 +124,22 @@ namespace ImportPOC2.Processors
                     BatchProcessor.AddIncorrectFormatError(criteriaCode, string.Format("Invalid Option_Type value: {0}", sheetRow.Option_Type)); 
                 }
             }
+        }
+
+        public void FinalizeOptions()
+        {
+            var criteriaSetShippingOption = _criteriaProcessor.GetAllCriteriaSetByCode(Constants.CriteriaCodes.ShippingOption);
+            var criteriaSetProductOption = _criteriaProcessor.GetAllCriteriaSetByCode(Constants.CriteriaCodes.ProductOption);
+            var criteriaSetImprintOption = _criteriaProcessor.GetAllCriteriaSetByCode(Constants.CriteriaCodes.ImprintOption);
+
+            var optionIdsToDelete = criteriaSetShippingOption.Select(s => s.CriteriaSetId).Except(productOptionsMap.Select(m => m.CriteriaSetId)).ToList();
+            optionIdsToDelete.AddRange(criteriaSetProductOption.Select(s => s.CriteriaSetId).Except(productOptionsMap.Select(m => m.CriteriaSetId)).ToList());
+            optionIdsToDelete.AddRange(criteriaSetImprintOption.Select(s => s.CriteriaSetId).Except(productOptionsMap.Select(m => m.CriteriaSetId)).ToList());
+
+            optionIdsToDelete.ForEach(csId =>
+            {
+                _criteriaProcessor.removeCriteriaSet(csId);
+            });
         }
     }
 }

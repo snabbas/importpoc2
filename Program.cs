@@ -834,6 +834,7 @@ namespace ImportPOC2
                 _hasErrors = false;
                 _criteriaProcessor = new CriteriaProcessor(_currentProduct);
                 _priceProcessor = new PriceProcessor(_criteriaProcessor);
+                _optionProcessor = new OptionsProcessor(_criteriaProcessor);
                 _productNumbersProcessor = new ProductNumbersProcessor(_criteriaProcessor, _priceProcessor, _currentProduct);
                 BatchProcessor.CurrentXid = _curXid;
             }
@@ -2774,6 +2775,7 @@ namespace ImportPOC2
             {
                 _priceProcessor.FinalizeProductPricing(_currentProduct);
                 _productNumbersProcessor.FinalizeProductNumbers();
+                _optionProcessor.FinalizeOptions();
                 //TODO: other repeatable sets will "finalize" here as well. 
 
                 if (!_hasErrors)
